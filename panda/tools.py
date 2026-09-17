@@ -155,6 +155,11 @@ class LiveHTTPExecutor:
         url = urljoin(self.base_url, test.path.lstrip("/"))
         headers = dict(self.auth_profiles.get(test.auth_profile, {}))
 
+        # Send JSON body for POST/PUT/PATCH if provided
+        json_body = test.request_body if test.request_body else None
+        if json_body:
+            headers.setdefault("Content-Type", "application/json")
+
         start = time.perf_counter()
         try:
             response = self._session.request(
@@ -162,6 +167,7 @@ class LiveHTTPExecutor:
                 url,
                 params=test.query_params or None,
                 headers=headers,
+                json=json_body,
                 timeout=self.timeout,
                 allow_redirects=False,
             )

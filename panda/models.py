@@ -239,6 +239,10 @@ class TestCase(BaseModel):
     path: str = Field(description="The endpoint path, using concrete values for path parameters.")
     query_params: dict[str, str] = Field(default_factory=dict)
     auth_profile: str = Field(default="anonymous", description="Auth profile name to use.")
+    request_body: dict[str, Any] = Field(
+        default_factory=dict,
+        description="JSON body for POST/PUT/PATCH requests. Empty dict means no body.",
+    )
     reasoning: str = Field(
         description="Why this specific probe was chosen and what it will reveal."
     )

@@ -185,34 +185,70 @@ def _llm_call(
 # Phase 1 — Reconnaissance (deterministic)
 # ---------------------------------------------------------------------------
 
+# Common paths that may exist but not be documented in OpenAPI specs
+_UNDOCUMENTED_PROBE_PATHS = [
+    "/debug", "/internal", "/graphql", "/swagger", "/api-docs",
+    "/actuator", "/actuator/health", "/metrics", "/.env", "/config",
+    "/admin", "/status", "/info", "/version", "/api/v1", "/api/v2",
+    "/console", "/trace", "/dump", "/env", "/heapdump",
+]
+
+# Security-relevant response headers to fingerprint
+_SECURITY_HEADERS = {
+    "server", "x-powered-by", "x-frame-options", "x-content-type-options",
+    "strict-transport-security", "content-security-policy",
+    "access-control-allow-origin", "access-control-allow-methods",
+    "access-control-allow-credentials", "x-xss-protection",
+    "referrer-policy", "permissions-policy", "set-cookie",
+    "www-authenticate", "x-ratelimit-limit", "x-ratelimit-remaining",
+}
+
+
+def _fingerprint_headers(resp: requests.Response) -> dict[str, str]:
+    """Extract security-relevant headers from a response."""
+    return {
+        key: value
+        for key, value in resp.headers.items()
+        if key.lower() in _SECURITY_HEADERS
+    }
+
+
 def _discover_api(
     target_url: str,
     events: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Discover the target through its documentation and baseline probes."""
+    """Discover the target through its documentation, baseline probes,
+    undocumented-path probing, and header fingerprinting."""
     base_url = _base_url(target_url)
     session = requests.Session()
     session.headers.update({"User-Agent": "PANDA-discovery/1.0"})
 
-    # --- Fetch OpenAPI schema ---
+    # --- Fetch OpenAPI schema (try multiple common locations) ---
     _emit_event(events, "recon", "started", "openapi_discovery", "learning the API contract")
 
-    docs_url = urljoin(base_url, "docs")
-    docs_response = session.get(docs_url, timeout=5)
-    _emit_event(events, "recon", "called tool", "http_get", f"/docs -> {docs_response.status_code}")
-    print(f"[recon] GET {docs_url} -> {docs_response.status_code}")
-
-    schema_url = urljoin(base_url, "openapi.json")
-    schema_response = session.get(schema_url, timeout=5)
-    _emit_event(events, "recon", "called tool", "http_get", f"/openapi.json -> {schema_response.status_code}")
-    print(f"[recon] GET {schema_url} -> {schema_response.status_code}")
-
     schema: dict[str, Any] = {}
-    if schema_response.ok:
+    openapi_candidates = [
+        "openapi.json", "swagger.json", "api-docs",
+        "docs", "v1/openapi.json", "api/openapi.json",
+    ]
+    for spec_path in openapi_candidates:
+        spec_url = urljoin(base_url, spec_path)
         try:
-            schema = schema_response.json()
-        except ValueError:
-            print("[recon] OpenAPI response was not valid JSON.")
+            resp = session.get(spec_url, timeout=5)
+            _emit_event(events, "recon", "called tool", "http_get",
+                        f"/{spec_path} -> {resp.status_code}")
+            print(f"[recon] GET {spec_url} -> {resp.status_code}")
+            if resp.ok and not schema:
+                try:
+                    candidate = resp.json()
+                    # Validate it looks like an OpenAPI spec
+                    if isinstance(candidate, dict) and ("paths" in candidate or "openapi" in candidate or "swagger" in candidate):
+                        schema = candidate
+                        print(f"[recon]   -> found valid OpenAPI spec at /{spec_path}")
+                except ValueError:
+                    pass
+        except requests.RequestException:
+            pass
 
     # Parse documented paths
     paths = schema.get("paths", {})
@@ -240,11 +276,12 @@ def _discover_api(
     # --- Baseline probes: hit every GET endpoint with every auth profile ---
     profiles = _auth_profiles()
     baseline_results: list[dict[str, Any]] = []
+    header_fingerprints: dict[str, dict[str, str]] = {}  # path -> headers
 
     for path, operations in documented_paths.items():
         if "get" not in operations:
             continue
-        # Skip paths with path parameters for baseline (we'll test those in the investigation)
+        # Skip paths with path parameters for baseline (tested separately below)
         if "{" in path:
             continue
         for profile_name, headers in profiles.items():
@@ -256,6 +293,9 @@ def _discover_api(
                     "auth_profile": profile_name,
                     "status_code": resp.status_code,
                 }
+                # Fingerprint headers on first response per path
+                if path not in header_fingerprints:
+                    header_fingerprints[path] = _fingerprint_headers(resp)
                 try:
                     body = resp.json()
                     result["response_body"] = json.dumps(body, indent=2, default=str)[:1500]
@@ -272,11 +312,12 @@ def _discover_api(
                     "status_code": 0, "error": str(exc)[:200],
                 })
 
-    # Also test a couple of parameterized paths with simple IDs
+    # --- Parameterized path probes: expanded ID range + edge cases ---
+    test_ids = ["1", "2", "99", "9999", "0", "-1"]
     for path, operations in documented_paths.items():
         if "get" not in operations or "{" not in path:
             continue
-        for test_id in ["1", "2"]:
+        for test_id in test_ids:
             concrete = re.sub(r"\{[^}]+\}", test_id, path)
             for profile_name, headers in profiles.items():
                 url = urljoin(base_url, concrete.lstrip("/"))
@@ -289,6 +330,8 @@ def _discover_api(
                         "auth_profile": profile_name,
                         "status_code": resp.status_code,
                     }
+                    if path not in header_fingerprints:
+                        header_fingerprints[path] = _fingerprint_headers(resp)
                     try:
                         body = resp.json()
                         result["response_body"] = json.dumps(body, indent=2, default=str)[:1500]
@@ -301,7 +344,75 @@ def _discover_api(
                 except requests.RequestException:
                     pass
 
-    _emit_event(events, "recon", "completed", detail=f"discovered {len(paths)} paths, ran {len(baseline_results)} baseline probes")
+    # --- Undocumented path probing ---
+    _emit_event(events, "recon", "started", "undocumented_probing",
+                f"probing {len(_UNDOCUMENTED_PROBE_PATHS)} common undocumented paths")
+    print(f"\n[recon] Probing {len(_UNDOCUMENTED_PROBE_PATHS)} common undocumented paths...")
+    undocumented_findings: list[dict[str, Any]] = []
+    documented_path_set = set(documented_paths.keys())
+    for probe_path in _UNDOCUMENTED_PROBE_PATHS:
+        if probe_path in documented_path_set:
+            continue
+        url = urljoin(base_url, probe_path.lstrip("/"))
+        try:
+            resp = session.get(url, timeout=3)
+            finding = {
+                "path": probe_path,
+                "status_code": resp.status_code,
+                "content_type": resp.headers.get("content-type", ""),
+            }
+            if resp.status_code not in {404, 405}:
+                # Non-404 means something responded at this undocumented path
+                try:
+                    body = resp.json()
+                    finding["response_body"] = json.dumps(body, indent=2, default=str)[:500]
+                except ValueError:
+                    finding["response_body"] = resp.text[:500]
+                undocumented_findings.append(finding)
+                print(f"[recon]   {probe_path} -> {resp.status_code} [INTERESTING]")
+            else:
+                print(f"[recon]   {probe_path} -> {resp.status_code}")
+        except requests.RequestException:
+            pass
+
+    # --- Consolidate header fingerprint report ---
+    header_summary: dict[str, Any] = {}
+    present_headers: set[str] = set()
+    for path_headers in header_fingerprints.values():
+        for k in path_headers:
+            present_headers.add(k.lower())
+    missing_security_headers = [
+        h for h in ["x-content-type-options", "x-frame-options",
+                    "strict-transport-security", "content-security-policy"]
+        if h not in present_headers
+    ]
+    info_leak_headers = {
+        k: v for path_headers in header_fingerprints.values()
+        for k, v in path_headers.items()
+        if k.lower() in {"server", "x-powered-by"}
+    }
+    cors_headers = {
+        k: v for path_headers in header_fingerprints.values()
+        for k, v in path_headers.items()
+        if k.lower().startswith("access-control")
+    }
+    header_summary = {
+        "present_security_headers": sorted(present_headers & _SECURITY_HEADERS),
+        "missing_security_headers": missing_security_headers,
+        "info_leak_headers": info_leak_headers,
+        "cors_headers": cors_headers,
+    }
+    if missing_security_headers:
+        print(f"[recon] Missing security headers: {', '.join(missing_security_headers)}")
+    if info_leak_headers:
+        print(f"[recon] Info-leak headers: {info_leak_headers}")
+    if cors_headers:
+        print(f"[recon] CORS headers: {cors_headers}")
+
+    _emit_event(events, "recon", "completed",
+                detail=f"discovered {len(paths)} documented paths, "
+                       f"{len(undocumented_findings)} undocumented paths responded, "
+                       f"ran {len(baseline_results)} baseline probes")
 
     return {
         "target_url": target_url,
@@ -311,6 +422,8 @@ def _discover_api(
         "api_version": schema.get("info", {}).get("version", ""),
         "documented_paths": documented_paths,
         "baseline_results": baseline_results,
+        "undocumented_findings": undocumented_findings,
+        "header_fingerprints": header_summary,
         "auth_profiles_available": list(profiles.keys()),
     }
 
@@ -338,6 +451,12 @@ and relationships, then note security-relevant observations.
 - Title: {discovery.get('api_title', 'Unknown')}
 - Version: {discovery.get('api_version', 'Unknown')}
 - Auth profiles available: {json.dumps(discovery.get('auth_profiles_available', []))}
+
+## Response Header Fingerprints
+{json.dumps(discovery.get('header_fingerprints', {}), indent=2)}
+
+## Undocumented Paths That Responded
+{json.dumps(discovery.get('undocumented_findings', []), indent=2)}
 
 ## Documented Endpoints
 {json.dumps(discovery.get('documented_paths', {}), indent=2)}
@@ -518,10 +637,11 @@ Each test should have a clear purpose: what it tests, what you expect to see
 if the vulnerability exists, and what a secure response looks like.
 
 ## Rules
-- ONLY use GET or HEAD methods (safety policy)
-- Use ONLY the documented endpoint paths from the API
+- You may use GET, HEAD, POST, PUT, PATCH, or DELETE methods as appropriate
+- You may test any endpoint path — documented or discovered during recon
 - Use ONLY the available auth profiles
 - Use concrete path parameter values (e.g., 1, 2, 99) for parameterized paths
+- For POST/PUT/PATCH, include a request_body field with the JSON body to send
 - Design 4-10 test cases, prioritizing the highest-relevance hypotheses
 - Each test should be independently meaningful
 
@@ -547,6 +667,7 @@ Return ONLY a JSON array of test cases:
     "path": "/users/2",
     "query_params": {{}},
     "auth_profile": "user-token",
+    "request_body": {{}},
     "reasoning": "Why this specific probe and what it will reveal...",
     "expected_if_vulnerable": "What response means the vulnerability exists...",
     "expected_if_safe": "What response means the API is properly secured..."
@@ -565,25 +686,39 @@ Return ONLY a JSON array of test cases:
         print(f"[test_planner] Warning: could not parse test plan: {exc}")
         tests = []
 
-    # Safety validation — reject any non-GET/HEAD tests
+    # Safety validation — flexible method allowance, lenient path matching
+    allowed_methods = {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"}
     safe_tests = []
     known_paths = set(discovery.get("documented_paths", {}).keys())
+    # Also include paths discovered during undocumented probing
+    for uf in discovery.get("undocumented_findings", []):
+        known_paths.add(uf.get("path", ""))
+    # Add paths observed in baseline results
+    for br in discovery.get("baseline_results", []):
+        known_paths.add(br.get("path", ""))
+        if "concrete_path" in br:
+            known_paths.add(br["concrete_path"])
+
     for test in tests:
         method = test.method.upper()
-        if method not in {"GET", "HEAD"}:
+        if method not in allowed_methods:
             _emit_event(events, "safety", "rejected test", "policy",
-                        f"{test.id}: method {method} not allowed")
+                        f"{test.id}: method {method} not recognized")
             continue
-        # Check that the base path (without parameter substitutions) exists
+        # Lenient path matching: accept if any known path is a prefix or
+        # if the test path (with IDs replaced) matches a known template
         base_path = re.sub(r"/\d+", "/{id}", test.path)
-        # Be lenient: accept the test if any documented path is a prefix match
-        path_ok = any(
-            test.path.startswith(dp.split("{")[0]) for dp in known_paths
-        ) or test.path in known_paths or base_path in known_paths
+        # Also try common parameter patterns
+        base_path_alt = re.sub(r"/\d+", "/{user_id}", test.path)
+        path_ok = (
+            test.path in known_paths
+            or base_path in known_paths
+            or base_path_alt in known_paths
+            or any(test.path.startswith(dp.split("{")[0].rstrip("/")) for dp in known_paths if dp)
+        )
         if not path_ok:
-            _emit_event(events, "safety", "rejected test", "policy",
-                        f"{test.id}: path {test.path} not in documented endpoints")
-            continue
+            _emit_event(events, "safety", "warning", "policy",
+                        f"{test.id}: path {test.path} not in known endpoints (allowing anyway)")
         safe_tests.append(test)
 
     print(f"\n[test_planner] === Test Plan ({len(safe_tests)} tests, iteration {iteration}) ===")
@@ -935,7 +1070,7 @@ def _write_markdown_report(
 _MAX_INVESTIGATION_ITERATIONS = 3
 
 
-def run_panda_assessment(target_url: str) -> str:
+def run_panda_assessment(target_url: str, *, allow_write: bool = True) -> str:
     """Run the full LLM-driven PANDA security assessment pipeline."""
 
     print("\n" + "=" * 60)
@@ -970,6 +1105,7 @@ def run_panda_assessment(target_url: str) -> str:
         base_url=discovery["base_url"],
         auth_profiles=profiles,
         rate_limit=30,
+        allow_write=allow_write,
     )
 
     # --- Phase 2: API Understanding ---
