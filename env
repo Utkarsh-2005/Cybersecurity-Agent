@@ -1,0 +1,5 @@
+OPENROUTER_API_KEY=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
+
+OPENROUTER_MODEL=openai/gpt-4o-mini
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+PANDA_AUTH_PROFILES_JSON={"user-token":{"Authorization":"Bearer user-token"},"admin-token":{"Authorization":"Bearer admin-token"}}
