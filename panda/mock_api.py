@@ -18,8 +18,10 @@ Intentional vulnerabilities (for agent discovery, NOT labeled anywhere):
 
 from __future__ import annotations
 
+import time
 import traceback
 import uuid
+import requests
 from datetime import datetime, timezone
 from typing import Any
 
@@ -92,6 +94,15 @@ class UpdateUserRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class WebhookTestRequest(BaseModel):
+    target_url: str
+
+
+class ExportReportsRequest(BaseModel):
+    report_type: str = "users"
+    row_limit: int = 100
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +324,34 @@ def health():
 
 
 # ---- Users ----
+
+@app.get("/api/v1/users", include_in_schema=False)
+def list_users_v1(limit: int = Query(default=20, ge=1, le=100)):
+    """Old version of the users API. 
+    Vulnerability: Improper Inventory Management (API9). 
+    This endpoint does not require authentication and returns PII.
+    It is hidden from the OpenAPI schema but remains active.
+    """
+    users = list(_USERS.values())[:limit]
+    return {
+        "users": [
+            {
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "full_name": u.full_name,
+                "role": u.role,
+                "department": u.profile.department,
+                "phone": u.profile.phone,
+                "is_active": u.is_active,
+                "created_at": u.created_at,
+            }
+            for u in users
+        ],
+        "total": len(users),
+        "warning": "This is a v1 deprecated API.",
+    }
+
 
 @app.get("/users")
 def list_users(
@@ -562,6 +601,69 @@ def export_users(
         "count": len(all_users),
         "users": all_users,
     }
+
+
+@app.post("/reports/export")
+def generate_export(
+    body: ExportReportsRequest,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    """Generate a large export report.
+    Vulnerability: Unrestricted Resource Consumption (API4).
+    The row_limit has no maximum validation. If a huge number is provided,
+    it accepts it and pretends to process a massive job.
+    """
+    token, requester_id = _resolve_auth(authorization)
+    if requester_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    # No upper bound validation on row_limit
+    estimated_seconds = body.row_limit * 0.05
+    if body.row_limit > 10000:
+        return {
+            "status": "processing",
+            "job_id": f"job_{uuid.uuid4().hex[:8]}",
+            "rows_requested": body.row_limit,
+            "estimated_completion_time_seconds": estimated_seconds,
+            "message": "Large job accepted. This will consume significant server resources."
+        }
+    return {
+        "status": "completed",
+        "rows_processed": body.row_limit,
+    }
+
+
+# ---- Webhooks ----
+
+@app.post("/webhooks/test")
+def test_webhook(
+    body: WebhookTestRequest,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    """Test a webhook URL.
+    Vulnerability: Server-Side Request Forgery (SSRF) (API7).
+    The endpoint fetches the user-provided URL without any validation
+    or restrictions against internal endpoints (like localhost).
+    """
+    token, requester_id = _resolve_auth(authorization)
+    if requester_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    try:
+        # Dangerous: blindly fetching the user-provided URL
+        # We use a short timeout to prevent the mock server from hanging
+        resp = requests.get(body.target_url, timeout=2.0)
+        return {
+            "message": "Webhook test completed.",
+            "target_url": body.target_url,
+            "status_code": resp.status_code,
+            "response_body": resp.text[:1000],  # Return up to 1KB of the response
+        }
+    except Exception as e:
+        return {
+            "message": "Webhook test failed.",
+            "error": str(e),
+        }
 
 
 # ---------------------------------------------------------------------------

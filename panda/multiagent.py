@@ -191,6 +191,7 @@ _UNDOCUMENTED_PROBE_PATHS = [
     "/actuator", "/actuator/health", "/metrics", "/.env", "/config",
     "/admin", "/status", "/info", "/version", "/api/v1", "/api/v2",
     "/console", "/trace", "/dump", "/env", "/heapdump",
+    "/api/v1/users", "/v1/users",
 ]
 
 # Security-relevant response headers to fingerprint
@@ -642,6 +643,7 @@ if the vulnerability exists, and what a secure response looks like.
 - Use ONLY the available auth profiles
 - Use concrete path parameter values (e.g., 1, 2, 99) for parameterized paths
 - For POST/PUT/PATCH, include a request_body field with the JSON body to send
+- When testing for Server-Side Request Forgery (SSRF) on webhook/URL endpoints, use internal URLs like `http://127.0.0.1:8000/health` or `http://localhost:8000/admin/reports`
 - Design 4-10 test cases, prioritizing the highest-relevance hypotheses
 - Each test should be independently meaningful
 

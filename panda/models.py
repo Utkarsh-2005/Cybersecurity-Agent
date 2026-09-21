@@ -275,7 +275,7 @@ class HypothesisUpdate(BaseModel):
     """LLM's updated assessment of a hypothesis after seeing test results."""
     hypothesis_id: str
     new_confidence: float = Field(ge=0.0, le=1.0)
-    status: Literal["CONFIRMED", "LIKELY", "INCONCLUSIVE", "UNLIKELY", "REJECTED"]
+    status: Literal["CONFIRMED", "LIKELY", "INCONCLUSIVE", "UNLIKELY", "REJECTED", "PARTIAL", "OPEN"]
     reasoning: str = Field(description="Why the confidence/status changed based on the evidence.")
 
 
