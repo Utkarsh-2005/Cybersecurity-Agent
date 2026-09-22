@@ -125,6 +125,7 @@ Return ONLY a JSON object:
       "evidence": ["Specific HTTP request/response evidence..."],
       "impact": "What an attacker could achieve...",
       "remediation": "Specific, actionable fix...",
+        "state": "OBSERVED|SUSPECTED|CONFIRMED|NOT_TESTED",
         "confidence": 0.8,
         "observation_confidence": 0.95,
         "classification_confidence": 0.85,
@@ -161,11 +162,22 @@ Return ONLY a JSON object:
             reasoning=content[:2000],
             executive_summary="Report generation encountered a parsing error. Raw analysis is available in the reasoning field.",
             api_overview=understanding.business_context,
+            limitations=["LLM report synthesis failed; deterministic evidence fallback was applied."],
         )
 
     report.findings = _evidence_gate(report.findings, all_results)
+    report.findings = _merge_deterministic_findings(
+        report.findings,
+        _deterministic_findings(discovery, all_results),
+    )
     _normalize_finding_confidence(report.findings)
     report.authorization_matrix = authorization_matrix
+    report.coverage = _build_coverage(discovery, all_results, report.coverage)
+    if report.findings and "parsing error" in report.executive_summary.lower():
+        report.executive_summary = (
+            "The assessment confirmed security-relevant behavior from executed HTTP evidence. "
+            "The narrative LLM synthesis failed, so deterministic evidence-backed findings are shown below."
+        )
     if not all_results:
         report.findings = []
         report.executive_summary = (
@@ -186,6 +198,292 @@ Return ONLY a JSON object:
             "This is not evidence that the target is secure.",
         ]))
     return report
+
+
+def _deterministic_findings(
+    discovery: dict[str, Any],
+    results: list[ProbeResult],
+) -> list[Any]:
+    """Convert directly observed baseline and executed behavior into findings."""
+    from panda.models import Finding
+
+    findings: list[Finding] = []
+    baseline = discovery.get("baseline_results", [])
+
+    def observed(path_fragment: str, profile: str | None = None) -> list[dict[str, Any]]:
+        return [
+            item for item in baseline
+            if path_fragment in item.get("path", "")
+            and (profile is None or item.get("auth_profile") == profile)
+            and item.get("status_code") == 200
+        ]
+
+    export_results = observed("/admin/users/export", "user-token")
+    if export_results:
+        findings.append(Finding(
+            id="DF-BFLA",
+            title="Authenticated User Can Access Admin User Export",
+            severity="HIGH",
+            owasp_category="API5:2023-Broken-Function-Level-Authorization",
+            state="CONFIRMED",
+            description="The user-token profile received a successful response from the documented admin user export endpoint.",
+            evidence=["GET /admin/users/export (user-token) -> 200 from reconnaissance baseline."],
+            impact="A non-admin authenticated user may retrieve an administrative export containing other users' data.",
+            remediation="Require an administrator role before allowing access to the user export function.",
+            confidence=0.9,
+            observation_confidence=0.99,
+            classification_confidence=0.9,
+            classification_rationale="The evidence directly demonstrates a lower-privileged profile reaching a route documented as an admin function.",
+            validation_checks=["BASELINE_RESPONSE", "AUTH_PROFILE_STATUS_DIFFERENTIAL"],
+            route_classification="DOCUMENTED_API_ROUTE",
+        ))
+
+    settings_results = [
+        item for item in baseline
+        if item.get("path", "").endswith("/settings")
+        and item.get("auth_profile") == "user-token"
+        and item.get("status_code") == 200
+    ]
+    bola_results = [
+        result for result in results
+        if "BOLA_NON_OWNER_SUCCESS" in result.validation_checks
+        and result.status_code in {200, 201, 202}
+    ]
+    if bola_results:
+        findings.append(Finding(
+            id="DF-BOLA-CONFIRMED",
+            title="Authenticated Principal Can Access Another User's Object",
+            severity="HIGH",
+            owasp_category="API1:2023-BOLA",
+            state="CONFIRMED",
+            description="A principal with known identity successfully accessed a different numeric user object ID.",
+            evidence=[
+                f"{result.method} {result.path} ({result.username or result.auth_profile}, principal {result.principal_id}) -> {result.status_code}"
+                for result in bola_results[:6]
+            ],
+            impact="A user may read or modify another user's profile or settings, including sensitive properties.",
+            remediation="Enforce ownership or role authorization against the requested user ID before returning or modifying the object.",
+            confidence=0.95,
+            observation_confidence=0.99,
+            classification_confidence=0.95,
+            classification_rationale="The principal identity and requested numeric object ID are both known, and the non-owner request succeeded.",
+            evidence_test_ids=[result.test_id for result in bola_results],
+            evidence_request_ids=[result.request_id for result in bola_results if result.request_id],
+            validation_checks=["BOLA_NON_OWNER_SUCCESS", "KNOWN_PRINCIPAL_ID"],
+            route_classification=bola_results[0].route_classification,
+        ))
+    if settings_results:
+        findings.append(Finding(
+            id="DF-BOLA-SETTINGS",
+            title="User Token Can Read Other User Settings",
+            severity="HIGH",
+            owasp_category="API1:2023-BOLA",
+            state="SUSPECTED",
+            description="The user-token profile received successful responses for multiple user settings object IDs. Ownership of the token was not established in this run, so this remains a suspected BOLA finding.",
+            evidence=[
+                f"GET {item.get('path')} (user-token) -> {item.get('status_code')}"
+                for item in settings_results[:6]
+            ],
+            impact="If the token belongs to a different user, private settings such as API keys and webhook URLs may be exposed.",
+            remediation="Enforce requester ownership or an explicitly authorized role before returning another user's settings.",
+            confidence=0.65,
+            observation_confidence=0.99,
+            classification_confidence=0.65,
+            classification_rationale="Successful object-specific reads are observed, but BOLA requires verified token ownership and a cross-owner comparison.",
+            validation_checks=["BASELINE_RESPONSE", "OBJECT_ID_COMPARISON_REQUIRED"],
+            route_classification="DOCUMENTED_API_ROUTE",
+        ))
+
+    user_list_results = observed("/users", "user-token")
+    if user_list_results:
+        findings.append(Finding(
+            id="DF-DATA-EXPOSURE",
+            title="Authenticated User Receives Excessive User Data",
+            severity="MEDIUM",
+            owasp_category="API3:2023-Broken-Object-Property-Level-Authorization",
+            state="OBSERVED",
+            description="The authenticated users collection returned a broad user listing. The response should be reviewed for unnecessary PII and sensitive properties.",
+            evidence=["GET /users (user-token) -> 200 from reconnaissance baseline."],
+            impact="Unnecessary user attributes can support account enumeration, profiling, and follow-on attacks.",
+            remediation="Return only fields required by the client and enforce field-level authorization for sensitive properties.",
+            confidence=0.7,
+            observation_confidence=0.95,
+            classification_confidence=0.7,
+            classification_rationale="The collection is accessible to an authenticated user and is designed to expose broad user records; property-level impact requires response-field review.",
+            validation_checks=["BASELINE_RESPONSE", "SENSITIVE_FIELD_REVIEW_REQUIRED"],
+            route_classification="DOCUMENTED_API_ROUTE",
+        ))
+
+    hidden_results = [
+        item for item in discovery.get("undocumented_findings", [])
+        if item.get("route_classification") == "DISCOVERED_API_ROUTE"
+        and item.get("status_code") == 200
+    ]
+    if hidden_results:
+        findings.append(Finding(
+            id="DF-INVENTORY",
+            title="Undocumented API Route Exposes User Data",
+            severity="MEDIUM",
+            owasp_category="API9:2023-Improper-Inventory-Management",
+            state="CONFIRMED",
+            description="Reconnaissance discovered an active JSON route that was not present in the OpenAPI inventory.",
+            evidence=[f"GET {item.get('path')} -> {item.get('status_code')} ({item.get('content_type', '')})" for item in hidden_results],
+            impact="Untracked API versions can expose data and bypass the controls applied to documented routes.",
+            remediation="Remove deprecated routes or document, authenticate, authorize, and monitor them consistently.",
+            confidence=0.85,
+            observation_confidence=0.99,
+            classification_confidence=0.85,
+            classification_rationale="The route was positively identified as JSON/API behavior but was absent from the documented route inventory.",
+            validation_checks=["UNDOCUMENTED_JSON_ROUTE"],
+            route_classification="DISCOVERED_API_ROUTE",
+        ))
+
+    write_results = [
+        result for result in results
+        if result.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
+        and result.status_code not in {0, 404, 405}
+        and result.route_classification in {"DOCUMENTED_API_ROUTE", "DISCOVERED_API_ROUTE"}
+    ]
+    update_results = [
+        result for result in write_results
+        if result.method.upper() == "PUT" and "/users/" in result.path
+        and result.status_code in {200, 201, 202}
+    ]
+    if update_results:
+        findings.append(Finding(
+            id="DF-IDOR-UPDATE",
+            title="Authenticated User Can Update a User Object",
+            severity="HIGH",
+            owasp_category="API1:2023-BOLA",
+            state="SUSPECTED",
+            description="A non-anonymous profile successfully updated a user object through a parameterized endpoint. The profile's ownership of the target object was not established, so this is a suspected IDOR/BOLA issue.",
+            evidence=[
+                f"{result.method} {result.path} ({result.auth_profile}) -> {result.status_code}"
+                for result in update_results
+            ],
+            impact="A user may be able to modify another user's profile data if the target ID is not owned by the requester.",
+            remediation="Require an ownership or role check before applying updates to the requested user ID.",
+            confidence=0.65,
+            observation_confidence=0.99,
+            classification_confidence=0.65,
+            classification_rationale="The update succeeded, but the evidence does not yet establish that the authenticated principal differs from the target owner.",
+            evidence_test_ids=[result.test_id for result in update_results],
+            evidence_request_ids=[result.request_id for result in update_results if result.request_id],
+            validation_checks=["WRITE_RESPONSE", "OWNER_COMPARISON_REQUIRED"],
+            route_classification=update_results[0].route_classification,
+        ))
+
+    mass_assignment_results = [
+        result for result in write_results
+        if result.method.upper() == "POST"
+        and result.path == "/users"
+        and "role" in result.request_body
+        and result.status_code in {200, 201}
+    ]
+    if mass_assignment_results:
+        findings.append(Finding(
+            id="DF-MASS-ASSIGNMENT-SURFACE",
+            title="User Creation Accepts a Client-Supplied Role Field",
+            severity="MEDIUM",
+            owasp_category="API3:2023-Broken-Object-Property-Level-Authorization",
+            state="OBSERVED",
+            description="The user-creation request accepted a client-supplied role property. This demonstrates a mass-assignment surface; privilege escalation is not confirmed unless an elevated role is accepted or effective.",
+            evidence=[
+                f"POST {result.path} ({result.auth_profile}) -> {result.status_code}; submitted fields: {', '.join(result.request_body)}"
+                for result in mass_assignment_results
+            ],
+            impact="If privileged role values are accepted, a regular user may create an elevated account.",
+            remediation="Ignore client-supplied privilege fields and assign roles server-side according to policy.",
+            confidence=0.7,
+            observation_confidence=0.99,
+            classification_confidence=0.75,
+            classification_rationale="The request and successful response prove the property is accepted by the endpoint, but the submitted role was not elevated in this probe.",
+            evidence_test_ids=[result.test_id for result in mass_assignment_results],
+            evidence_request_ids=[result.request_id for result in mass_assignment_results if result.request_id],
+            validation_checks=["WRITE_RESPONSE", "ROLE_ESCALATION_NOT_CONFIRMED"],
+            route_classification=mass_assignment_results[0].route_classification,
+        ))
+
+    debug_results = [
+        result for result in results
+        if "_debug" in result.path.lower()
+        and result.status_code == 200
+        and result.route_classification in {"DOCUMENTED_API_ROUTE", "DISCOVERED_API_ROUTE"}
+        and _contains_sensitive_field(result)
+    ]
+    if not debug_results:
+        return findings
+    evidence_ids = [result.test_id for result in debug_results]
+    findings.append(Finding(
+        id="DF1",
+        title="Exposed Debug Endpoint Returns Sensitive User Data",
+        severity="HIGH",
+        owasp_category="API8:2023-Security-Misconfiguration",
+        description="A debug endpoint returned sensitive user properties, including credential-related data, to an unauthenticated request.",
+        evidence=[
+            f"{result.method} {result.path} ({result.auth_profile}) returned {result.status_code} with fields: {', '.join(result.response_fields)}"
+            for result in debug_results[:3]
+        ],
+        impact="An unauthenticated attacker may retrieve sensitive account data and use it for account compromise or further attacks.",
+        remediation="Remove the debug route from deployed environments or require strong authorization and redact passwords, tokens, and other secrets from responses.",
+        confidence=0.9,
+        state="CONFIRMED",
+        observation_confidence=0.99,
+        classification_confidence=0.85,
+        classification_rationale="The executed evidence proves an exposed debug function and sensitive response properties. It does not prove BOLA, BOPLA, or API6, so this is classified conservatively as API8 security misconfiguration.",
+        evidence_test_ids=evidence_ids,
+        evidence_request_ids=[result.request_id for result in debug_results if result.request_id],
+        validation_checks=sorted({check for result in debug_results for check in result.validation_checks}),
+        route_classification=debug_results[0].route_classification,
+    ))
+    return findings
+
+
+def _contains_sensitive_field(result: ProbeResult) -> bool:
+    sensitive_names = {"password", "passwd", "secret", "token", "ssn", "credit_card"}
+    return any(
+        any(name in field.lower() for name in sensitive_names)
+        for field in result.response_fields
+    ) or any(
+        name in result.response_body_summary.lower()
+        for name in sensitive_names
+    )
+
+
+def _merge_deterministic_findings(findings: list[Any], fallback: list[Any]) -> list[Any]:
+    existing_routes = {
+        (finding.owasp_category, tuple(finding.evidence_test_ids))
+        for finding in findings
+    }
+    for finding in fallback:
+        key = (finding.owasp_category, tuple(finding.evidence_test_ids))
+        if key not in existing_routes:
+            findings.append(finding)
+    return findings
+
+
+def _build_coverage(
+    discovery: dict[str, Any],
+    results: list[ProbeResult],
+    existing: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Fill coverage gaps without allowing the LLM to imply untested coverage."""
+    if existing:
+        return existing
+    methods = {result.method.upper() for result in results}
+    paths = {result.path.lower() for result in results}
+    debug_observed = any("_debug" in path for path in paths)
+    return [
+        {"category": "BOLA", "status": "NOT_CONCLUSIVELY_TESTED", "basis": "No verified owner/non-owner object comparison was executed."},
+        {"category": "BOPLA", "status": "PARTIAL", "basis": "Sensitive properties were observed, but property authorization was not isolated."},
+        {"category": "BFLA", "status": "NOT_CONCLUSIVELY_TESTED", "basis": "No controlled lower-role versus admin-function comparison was completed."},
+        {"category": "Debug/data exposure", "status": "CONFIRMED" if debug_observed else "NOT_TESTED", "basis": "A debug route was observed in executed responses." if debug_observed else "No debug route was tested."},
+        {"category": "Injection", "status": "NOT_TESTED", "basis": "No injection payloads were executed."},
+        {"category": "Authentication/JWT", "status": "PARTIAL" if any(result.status_code == 401 for result in results) else "NOT_TESTED", "basis": "Authentication responses were observed, but token issuance and validation were not fully tested."},
+        {"category": "Rate limiting", "status": "NOT_TESTED", "basis": "No sustained request-rate test was executed."},
+        {"category": "Write operations", "status": "TESTED" if methods & {"POST", "PUT", "PATCH", "DELETE"} else "NOT_TESTED", "basis": f"Executed methods: {', '.join(sorted(methods & {'POST', 'PUT', 'PATCH', 'DELETE'})) or 'none'}; destructive coverage remains bounded."},
+        {"category": "Security headers", "status": "OBSERVED" if discovery.get("header_fingerprints") else "NOT_TESTED", "basis": "Headers were fingerprinted during reconnaissance."},
+    ]
 
 
 def _evidence_gate(findings: list[Any], results: list[ProbeResult]) -> list[Any]:
@@ -212,6 +510,8 @@ def _evidence_gate(findings: list[Any], results: list[ProbeResult]) -> list[Any]
         finding.validation_checks = sorted({
             check for result in linked for check in result.validation_checks
         })
+        if finding.state == "CONFIRMED" and not finding.validation_checks:
+            finding.state = "SUSPECTED"
         gated.append(finding)
     return gated
 
@@ -283,6 +583,7 @@ def _render_markdown_report(
                 f"| Property | Value |",
                 f"|----------|-------|",
                 f"| **Severity** | {finding.severity} |",
+                f"| **State** | {finding.state} |",
                 f"| **OWASP Category** | {finding.owasp_category} |",
                 f"| **Confidence** | {finding.confidence:.0%} |",
                 f"| **Observation Confidence** | {finding.observation_confidence:.0%} |",

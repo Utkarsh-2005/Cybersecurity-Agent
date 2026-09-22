@@ -10,6 +10,7 @@ from panda.models import ProbeResult, TestAnalysis
 from panda.tools import LiveHTTPExecutor
 
 from .phases.execution import _execute_and_analyze
+from .phases.authorization_workflow import _run_authorization_workflow
 from .phases.recon import _discover_api
 from .phases.recon_loop import _run_recon_loop
 from .phases.reporting import (
@@ -33,6 +34,7 @@ def run_panda_assessment(target_url: str, *, allow_write: bool = False) -> str:
     print("  PANDA — LLM-Driven API Security Assessment")
     print("=" * 60)
     print(f"  Target: {target_url}")
+    print(f"  Write mode: {'LAB ENABLED' if allow_write else 'READ-ONLY (use --allow-write for POST/PUT/PATCH/DELETE)'}")
     print("=" * 60 + "\n")
 
     events: list[dict[str, Any]] = []
@@ -82,8 +84,16 @@ def run_panda_assessment(target_url: str, *, allow_write: bool = False) -> str:
     print("-" * 40)
     hypotheses = _model_threats(discovery, understanding, llm, events)
 
+    # --- Agent-selected identity-aware authorization workflow ---
+    print("\n" + "-" * 40)
+    print("  Phase 3b: Authorization Workflow Decision")
+    print("-" * 40)
+    workflow_results = _run_authorization_workflow(
+        discovery, hypotheses, executor, llm, events, allow_write=allow_write,
+    )
+
     # --- Phase 4+5: Investigation Loop ---
-    all_results: list[ProbeResult] = list(recon_results)
+    all_results: list[ProbeResult] = [*recon_results, *workflow_results]
     all_analyses: list[TestAnalysis] = []
 
     for iteration in range(1, _MAX_INVESTIGATION_ITERATIONS + 1):

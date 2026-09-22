@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Any
 
 from langchain_openai import ChatOpenAI
@@ -115,6 +116,9 @@ Return ONLY a JSON array of test cases:
         print(f"[test_planner] Warning: could not parse test plan: {exc}")
         tests = []
 
+    if allow_write:
+        tests.extend(_deterministic_lab_write_tests(discovery, hypotheses))
+
     target_route = discovery.get("target_route") or {}
     target_path = target_route.get("path")
     if target_path:
@@ -145,6 +149,10 @@ Return ONLY a JSON array of test cases:
     existing_probes = {
         (test.method.upper(), test.path, test.auth_profile)
         for test in tests
+    }
+    existing_results = {
+        (result.method.upper(), result.path, result.auth_profile, tuple(sorted(result.query_params.items())))
+        for result in previous_results or []
     }
     profile_names = discovery.get("auth_profiles_available", [])
     object_profiles = [name for name in profile_names if name != "anonymous"] or profile_names
@@ -222,6 +230,16 @@ Return ONLY a JSON array of test cases:
             _emit_event(events, "safety", "rejected test", "policy",
                         f"{test.id}: path {test.path} is {classification}, not a validated API route")
             continue
+        probe_key = (
+            method,
+            test.path,
+            test.auth_profile,
+            tuple(sorted(test.query_params.items())),
+        )
+        if probe_key in existing_results:
+            _emit_event(events, "safety", "rejected test", "policy",
+                        f"{test.id}: duplicate probe from a previous iteration")
+            continue
         safe_tests.append(test)
 
     print(f"\n[test_planner] === Test Plan ({len(safe_tests)} tests, iteration {iteration}) ===")
@@ -230,3 +248,77 @@ Return ONLY a JSON array of test cases:
     print()
 
     return safe_tests
+
+
+def _deterministic_lab_write_tests(
+    discovery: dict[str, Any],
+    hypotheses: list[ThreatHypothesis],
+) -> list[TestCase]:
+    """Guarantee bounded POST/PUT coverage when explicit lab mode is enabled."""
+    documented = discovery.get("documented_paths", {})
+    profile_names = discovery.get("auth_profiles_available", [])
+    auth_profile = next((name for name in profile_names if name != "anonymous"), None)
+    if not auth_profile:
+        return []
+    hypothesis_id = hypotheses[0].id if hypotheses else "H1"
+    suffix = uuid.uuid4().hex[:8]
+    candidates: list[TestCase] = []
+
+    if "/users" in documented and "post" in documented["/users"]:
+        candidates.append(TestCase(
+            id="LAB-POST-USERS",
+            hypothesis_id=hypothesis_id,
+            method="POST",
+            path="/users",
+            auth_profile=auth_profile,
+            request_body={
+                "username": f"panda_lab_{suffix}",
+                "email": f"panda_lab_{suffix}@example.invalid",
+                "full_name": "PANDA Lab User",
+                "role": "user",
+            },
+            reasoning="Bounded lab registration probe for mass-assignment and input handling.",
+            expected_if_vulnerable="The server accepts unauthorized role or unexpected fields.",
+            expected_if_safe="The server creates only a least-privileged user or rejects the request.",
+        ))
+
+    if "/auth/login" in documented and "post" in documented["/auth/login"]:
+        candidates.append(TestCase(
+            id="LAB-POST-LOGIN",
+            hypothesis_id=hypothesis_id,
+            method="POST",
+            path="/auth/login",
+            auth_profile="anonymous",
+            request_body={"username": "panda_lab_unknown", "password": "invalid"},
+            reasoning="Bounded login error-behavior probe for authentication enumeration.",
+            expected_if_vulnerable="The response reveals whether the username exists.",
+            expected_if_safe="The response uses a generic authentication failure.",
+        ))
+
+    if "/reports/export" in documented and "post" in documented["/reports/export"]:
+        candidates.append(TestCase(
+            id="LAB-POST-EXPORT",
+            hypothesis_id=hypothesis_id,
+            method="POST",
+            path="/reports/export",
+            auth_profile=auth_profile,
+            request_body={"report_type": "users", "row_limit": 1},
+            reasoning="Bounded low-volume export probe for request validation.",
+            expected_if_vulnerable="The endpoint accepts an unsafe export request without limits.",
+            expected_if_safe="The request is bounded and validated.",
+        ))
+
+    if "/users/{user_id}" in documented and "put" in documented["/users/{user_id}"]:
+        candidates.append(TestCase(
+            id="LAB-PUT-USER",
+            hypothesis_id=hypothesis_id,
+            method="PUT",
+            path="/users/2",
+            auth_profile=auth_profile,
+            request_body={"full_name": "PANDA Lab Update"},
+            reasoning="Bounded update probe for object-level authorization.",
+            expected_if_vulnerable="A user can update an object they do not own.",
+            expected_if_safe="The server denies or limits updates to owned objects.",
+        ))
+
+    return candidates

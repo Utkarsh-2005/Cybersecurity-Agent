@@ -274,6 +274,26 @@ class ReconPlan(BaseModel):
     stop_reason: str = ""
 
 
+class AuthorizationWorkflowStep(BaseModel):
+    """One bounded step selected by the agent for an authorization workflow."""
+    id: str
+    method: str = "GET"
+    path: str
+    auth_profile: str = "anonymous"
+    request_body: dict[str, Any] = Field(default_factory=dict)
+    purpose: str
+    expected_secure_behavior: str
+
+
+class AuthorizationWorkflowPlan(BaseModel):
+    """Agent decision about whether identity-aware authorization testing is useful."""
+    should_run: bool = False
+    workflow_type: Literal["NONE", "AUTHORIZATION_MATRIX", "OWNER_COMPARISON"] = "NONE"
+    reasoning: str = ""
+    stop_reason: str = ""
+    steps: list[AuthorizationWorkflowStep] = Field(default_factory=list)
+
+
 class HTTPResponseLog(BaseModel):
     """Sanitized, structured HTTP evidence shared with analysis phases."""
     request_id: str
@@ -319,7 +339,9 @@ class ProbeResult(BaseModel):
     request_id: str = ""
     requested_url: str = ""
     query_params: dict[str, str] = Field(default_factory=dict)
+    request_body: dict[str, Any] = Field(default_factory=dict)
     principal_id: str | None = None
+    username: str | None = None
     role: str | None = None
     content_type: str = ""
     content_length: int | None = None
@@ -375,6 +397,7 @@ class Finding(BaseModel):
         ge=0.0, le=1.0,
         description="Overall confidence, bounded by the observed behavior and classification confidence.",
     )
+    state: Literal["OBSERVED", "SUSPECTED", "CONFIRMED", "NOT_TESTED"] = "SUSPECTED"
     observation_confidence: float = Field(
         default=0.0, ge=0.0, le=1.0,
         description="Confidence that the cited behavior actually occurred in the executed evidence.",

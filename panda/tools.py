@@ -158,6 +158,7 @@ class LiveHTTPExecutor:
         profile = self.auth_profiles.get(test.auth_profile, {})
         headers = dict(profile.get("headers", profile) if isinstance(profile, dict) else {})
         principal_id = profile.get("principal_id") if isinstance(profile, dict) else None
+        username = profile.get("username") if isinstance(profile, dict) else None
         role = profile.get("role") if isinstance(profile, dict) else None
 
         # Send JSON body for POST/PUT/PATCH if provided
@@ -197,7 +198,9 @@ class LiveHTTPExecutor:
                 request_id=str(uuid.uuid4()),
                 requested_url=url,
                 query_params=test.query_params,
+                request_body=test.request_body,
                 principal_id=principal_id,
+                username=username,
                 role=role,
                 content_type=response.headers.get("content-type", ""),
                 content_length=len(response.content),

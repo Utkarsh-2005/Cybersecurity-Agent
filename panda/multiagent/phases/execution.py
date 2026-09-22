@@ -6,6 +6,7 @@ Execute test probes and ask the LLM to analyze the results.
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from typing import Any
 
@@ -171,6 +172,18 @@ def _apply_validation_checks(results: list[ProbeResult]) -> None:
             for result in path_results:
                 result.validation_checks.append("AUTH_PROFILE_BODY_EQUIVALENT")
 
+    for result in results:
+        if not result.principal_id or result.status_code not in {200, 201, 202}:
+            continue
+        match = re.search(r"/users/(\d+)(?:/|$)", result.path)
+        if not match:
+            continue
+        requested_id = match.group(1)
+        if requested_id == str(result.principal_id):
+            result.validation_checks.append("BOLA_OWNER_CONTROL")
+        else:
+            result.validation_checks.append("BOLA_NON_OWNER_SUCCESS")
+
 
 def build_authorization_matrix(results: list[ProbeResult]) -> list[dict[str, Any]]:
     """Summarize observed access by route and profile without inferring ownership."""
@@ -186,6 +199,7 @@ def build_authorization_matrix(results: list[ProbeResult]) -> list[dict[str, Any
         route["profiles"].append({
             "auth_profile": result.auth_profile,
             "principal_id": result.principal_id,
+            "username": result.username,
             "role": result.role,
             "method": result.method,
             "status_code": result.status_code,

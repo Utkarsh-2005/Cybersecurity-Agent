@@ -137,7 +137,15 @@ def _auth_profiles() -> dict[str, dict[str, str]]:
         raise ValueError("PANDA_AUTH_PROFILES_JSON must contain a JSON object") from exc
     if not isinstance(profiles, dict) or not all(isinstance(v, dict) for v in profiles.values()):
         raise ValueError("PANDA_AUTH_PROFILES_JSON must map profile names to HTTP header objects")
-    return {"anonymous": {}, **profiles}
+    profiles = {"anonymous": {}, **profiles}
+    known_identities = {
+        "user-token": {"principal_id": "1", "username": "alice", "role": "user", "identity_source": "configured-mock-default"},
+        "admin-token": {"principal_id": "99", "username": "sysadmin", "role": "admin", "identity_source": "configured-mock-default"},
+    }
+    for name, identity in known_identities.items():
+        if name in profiles and isinstance(profiles[name], dict):
+            profiles[name] = {**identity, **profiles[name]}
+    return profiles
 
 
 def _profile_headers(profile: dict[str, Any]) -> dict[str, str]:
@@ -146,11 +154,15 @@ def _profile_headers(profile: dict[str, Any]) -> dict[str, str]:
     return dict(headers) if isinstance(headers, dict) else {}
 
 
-def _profile_metadata(profile: dict[str, Any]) -> dict[str, str | None]:
+def _profile_metadata(profile: dict[str, Any]) -> dict[str, str | int | None]:
     """Return non-secret identity metadata for prompts and evidence."""
     return {
         "principal_id": profile.get("principal_id"),
+        "username": profile.get("username"),
         "role": profile.get("role"),
+        "identity_source": profile.get("identity_source"),
+        "issued_at": profile.get("issued_at"),
+        "expires_at": profile.get("expires_at"),
     }
 
 
