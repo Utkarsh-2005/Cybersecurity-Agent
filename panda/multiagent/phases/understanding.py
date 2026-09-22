@@ -48,6 +48,9 @@ and relationships, then note security-relevant observations.
 ## Baseline Probe Results
 {json.dumps(discovery.get('baseline_results', []), indent=2, default=str)}
 
+## Write-Method Probe Results
+{json.dumps(discovery.get('write_method_results', []), indent=2, default=str)}
+
 ## Response Format
 Return ONLY a JSON object with this exact structure:
 {{

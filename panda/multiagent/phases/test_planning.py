@@ -43,6 +43,19 @@ build on these results — don't repeat tests that have already been run.
 
     hypotheses_json = json.dumps([h.model_dump() for h in hypotheses], indent=2)
 
+    # Include write-method probe results if available
+    write_method_context = ""
+    write_results = discovery.get("write_method_results", [])
+    if write_results:
+        write_method_context = f"""
+## Write-Method Recon Results (POST/PUT/PATCH/DELETE probes from recon)
+These are responses from probing write endpoints with empty bodies during recon.
+Study the error messages, status codes, and field names — they reveal expected
+request schemas, authorization behavior, and potential attack surfaces.
+
+{json.dumps(write_results, indent=2, default=str)}
+"""
+
     prompt = f"""You are PANDA, an expert API security tester designing targeted probes.
 
 Design specific, safe test cases to investigate the threat hypotheses below.
@@ -50,14 +63,45 @@ Each test should have a clear purpose: what it tests, what you expect to see
 if the vulnerability exists, and what a secure response looks like.
 
 ## Rules
-- You may use GET, HEAD, POST, PUT, PATCH, or DELETE methods as appropriate
+- You MUST use GET, POST, PUT, PATCH, and DELETE methods as appropriate — do NOT limit yourself to GET
 - You may test any endpoint path — documented or discovered during recon
 - Use ONLY the available auth profiles
 - Use concrete path parameter values (e.g., 1, 2, 99) for parameterized paths
 - For POST/PUT/PATCH, include a request_body field with the JSON body to send
-- When testing for Server-Side Request Forgery (SSRF) on webhook/URL endpoints, use internal URLs like `http://127.0.0.1:8000/health` or `http://localhost:8000/admin/reports`
-- Design 4-10 test cases, prioritizing the highest-relevance hypotheses
+- Design 6-15 test cases, prioritizing the highest-relevance hypotheses
 - Each test should be independently meaningful
+- IMPORTANT: You must include tests for write-method endpoints (POST, PUT, PATCH), not just GET
+
+## Attack Pattern Reference
+Use these concrete attack patterns when designing probes:
+
+### BOLA (API1) — Broken Object Level Authorization
+- Access another user's resource: GET /users/2 with user-token (if user-token belongs to user 1)
+- Access settings/profile of another user: GET /users/2/settings with user-token
+
+### Broken Authentication (API2)
+- Test differential errors: POST /auth/login with valid username + wrong password, then invalid username + any password — compare error messages
+- Look for "User not found" vs "Invalid password" differences that leak username existence
+
+### Mass Assignment (API3) — Broken Object Property Level Authorization
+- Send privileged fields in creation: POST /users with {{"role": "admin"}} in the body
+- Check if response contains the elevated role
+
+### Unrestricted Resource Consumption (API4)
+- Send extreme values: POST /reports/export with {{"row_limit": 999999999}}
+- Look for acceptance without validation
+
+### BFLA (API5) — Broken Function Level Authorization
+- Access admin endpoints with user credentials: GET /admin/users/export with user-token
+- If it returns data instead of 403, it's broken
+
+### SSRF (API7) — Server-Side Request Forgery
+- On webhook/URL-accepting endpoints: POST /webhooks/test with {{"target_url": "http://127.0.0.1:8000/health"}} or "http://localhost:8000/admin/reports"
+- If the server fetches internal resources and returns them, it's vulnerable
+
+### IDOR via Write Methods
+- Update another user's data: PUT /users/2 with user-token (belonging to user 1) and a modified body
+- If it succeeds (200), there's no ownership check
 
 ## API Understanding
 {understanding.business_context}
@@ -67,7 +111,7 @@ if the vulnerability exists, and what a secure response looks like.
 
 ## Documented Endpoints  
 {json.dumps(discovery.get('documented_paths', {}), indent=2)}
-
+{write_method_context}
 ## Threat Hypotheses to Investigate
 {hypotheses_json}
 {previous_context}

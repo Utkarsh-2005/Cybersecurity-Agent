@@ -176,36 +176,86 @@ def _discover_api(
                 except requests.RequestException:
                     pass
 
-    # --- Undocumented path probing ---
+    # --- Undocumented path probing (with all auth profiles) ---
     _emit_event(events, "recon", "started", "undocumented_probing",
                 f"probing {len(_UNDOCUMENTED_PROBE_PATHS)} common undocumented paths")
-    print(f"\n[recon] Probing {len(_UNDOCUMENTED_PROBE_PATHS)} common undocumented paths...")
+    print(f"\n[recon] Probing {len(_UNDOCUMENTED_PROBE_PATHS)} common undocumented paths (with all auth profiles)...")
     undocumented_findings: list[dict[str, Any]] = []
     documented_path_set = set(documented_paths.keys())
     for probe_path in _UNDOCUMENTED_PROBE_PATHS:
         if probe_path in documented_path_set:
             continue
         url = urljoin(base_url, probe_path.lstrip("/"))
-        try:
-            resp = session.get(url, timeout=3)
-            finding = {
-                "path": probe_path,
-                "status_code": resp.status_code,
-                "content_type": resp.headers.get("content-type", ""),
-            }
-            if resp.status_code not in {404, 405}:
-                # Non-404 means something responded at this undocumented path
+        for profile_name, profile_headers in profiles.items():
+            try:
+                resp = session.get(url, headers=profile_headers, timeout=3)
+                finding = {
+                    "path": probe_path,
+                    "auth_profile": profile_name,
+                    "status_code": resp.status_code,
+                    "content_type": resp.headers.get("content-type", ""),
+                }
+                if resp.status_code not in {404, 405}:
+                    # Non-404 means something responded at this undocumented path
+                    try:
+                        body = resp.json()
+                        finding["response_body"] = json.dumps(body, indent=2, default=str)[:500]
+                        finding["response_fields"] = sorted(body.keys()) if isinstance(body, dict) else []
+                    except ValueError:
+                        finding["response_body"] = resp.text[:500]
+                    undocumented_findings.append(finding)
+                    if probe_path not in header_fingerprints:
+                        header_fingerprints[probe_path] = _fingerprint_headers(resp)
+                    print(f"[recon]   {probe_path} ({profile_name}) -> {resp.status_code} [INTERESTING]")
+                else:
+                    print(f"[recon]   {probe_path} ({profile_name}) -> {resp.status_code}")
+            except requests.RequestException:
+                pass
+
+    # --- Write-method endpoint discovery ---
+    # Probe documented POST/PUT/PATCH/DELETE endpoints with empty bodies
+    # to capture error responses, schema hints, and differential errors
+    write_method_results: list[dict[str, Any]] = []
+    write_methods_found = set()
+    for path, operations in documented_paths.items():
+        for method in ["post", "put", "patch", "delete"]:
+            if method not in operations:
+                continue
+            write_methods_found.add(f"{method.upper()} {path}")
+            concrete = re.sub(r"\{[^}]+\}", "1", path)  # use ID 1 for params
+            url = urljoin(base_url, concrete.lstrip("/"))
+            for profile_name, profile_headers in profiles.items():
                 try:
-                    body = resp.json()
-                    finding["response_body"] = json.dumps(body, indent=2, default=str)[:500]
-                except ValueError:
-                    finding["response_body"] = resp.text[:500]
-                undocumented_findings.append(finding)
-                print(f"[recon]   {probe_path} -> {resp.status_code} [INTERESTING]")
-            else:
-                print(f"[recon]   {probe_path} -> {resp.status_code}")
-        except requests.RequestException:
-            pass
+                    resp = session.request(
+                        method.upper(), url,
+                        headers={**profile_headers, "Content-Type": "application/json"},
+                        json={},
+                        timeout=5,
+                    )
+                    result = {
+                        "path": path,
+                        "concrete_path": concrete,
+                        "method": method.upper(),
+                        "auth_profile": profile_name,
+                        "status_code": resp.status_code,
+                    }
+                    try:
+                        body = resp.json()
+                        result["response_body"] = json.dumps(body, indent=2, default=str)[:1000]
+                        result["response_fields"] = sorted(body.keys()) if isinstance(body, dict) else []
+                    except ValueError:
+                        result["response_body"] = resp.text[:500]
+                    write_method_results.append(result)
+                    _emit_event(events, "recon", "called tool", "http_request",
+                                f"{method.upper()} {concrete} ({profile_name}) -> {resp.status_code}")
+                    print(f"[recon] {method.upper()} {url} ({profile_name}) -> {resp.status_code}")
+                except requests.RequestException:
+                    pass
+
+    if write_methods_found:
+        print(f"[recon] Probed {len(write_methods_found)} write-method endpoints: {write_methods_found}")
+    if write_method_results:
+        print(f"[recon] Collected {len(write_method_results)} write-method probe results")
 
     # --- Consolidate header fingerprint report ---
     header_summary: dict[str, Any] = {}
@@ -255,6 +305,7 @@ def _discover_api(
         "documented_paths": documented_paths,
         "baseline_results": baseline_results,
         "undocumented_findings": undocumented_findings,
+        "write_method_results": write_method_results,
         "header_fingerprints": header_summary,
         "auth_profiles_available": list(profiles.keys()),
     }

@@ -133,8 +133,10 @@ _REPORTS: dict[str, ReportRecord] = {
 
 # Token → user-id mapping (simulates JWT-extracted identity)
 _TOKEN_IDENTITY: dict[str, int] = {
-    "user-token": 1,      # alice
-    "admin-token": 99,    # sysadmin
+    "user-token": 1,      # alice (user 1)
+    "user-2-token": 2,    # bob (user 2)
+    "user-3-token": 3,    # carol (user 3, moderator)
+    "admin-token": 99,    # sysadmin (admin)
 }
 
 _CREDENTIALS: dict[str, str] = {
