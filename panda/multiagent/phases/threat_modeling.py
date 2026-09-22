@@ -46,12 +46,16 @@ sense given the API's structure and behavior.
 {json.dumps(discovery.get('baseline_results', []), indent=2, default=str)}
 
 ## OWASP API Security Top 10 (2023) Reference
-- API1:2023-BOLA — Broken Object Level Authorization
+- API1:2023-BOLA — Broken Object Level Authorization. Require an object identifier
+    and cross-principal access evidence; collection exposure alone is not BOLA.
 - API2:2023-Broken-Authentication — Broken Authentication  
-- API3:2023-Broken-Object-Property-Level-Authorization — Excessive data exposure, mass assignment
+- API3:2023-Broken-Object-Property-Level-Authorization — Unauthorized property
+    access or mass assignment. Do not use it solely because a response contains
+    sensitive data unless property-level authorization is demonstrated.
 - API4:2023-Unrestricted-Resource-Consumption — Rate limiting, resource exhaustion
 - API5:2023-Broken-Function-Level-Authorization — Admin/user function separation
-- API6:2023-Unrestricted-Access-to-Sensitive-Business-Flows — Business logic abuse
+- API6:2023-Unrestricted-Access-to-Sensitive-Business-Flows — Excessive automated
+    use of a sensitive business flow, not a generic data disclosure endpoint.
 - API7:2023-Server-Side-Request-Forgery — SSRF
 - API8:2023-Security-Misconfiguration — Headers, CORS, verbose errors, debug endpoints
 - API9:2023-Improper-Inventory-Management — Undocumented endpoints, version differences
@@ -71,7 +75,9 @@ Return ONLY a JSON array of threat hypotheses, ranked by relevance_score (highes
   }}
 ]
 
-Generate 3-7 hypotheses. Be specific — don't generate generic threats."""
+Generate 3-7 hypotheses. Be specific — don't generate generic threats. For each
+hypothesis, explain which observed behavior supports the category and name the
+missing evidence that would be needed to upgrade a tentative classification."""
 
     content, _ = _llm_call(llm, prompt, events, "threat_modeling", "generating ranked threat hypotheses")
 

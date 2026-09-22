@@ -50,8 +50,13 @@ def main() -> None:
         "target_url",
         help="Absolute API URL, for example http://127.0.0.1:8000",
     )
+    parser.add_argument(
+        "--allow-write",
+        action="store_true",
+        help="Enable POST/PUT/PATCH/DELETE probes for an explicitly authorized lab target.",
+    )
     args = parser.parse_args()
-    run_panda_assessment(args.target_url)
+    run_panda_assessment(args.target_url, allow_write=args.allow_write)
 
 
 if __name__ == "__main__":

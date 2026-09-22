@@ -22,6 +22,7 @@ from panda.models import (
 )
 
 from ..utils import _extract_json_from_response, _llm_call
+from .execution import build_authorization_matrix
 
 
 def _generate_report(
@@ -45,6 +46,7 @@ def _generate_report(
         indent=2, default=str,
     )
     hypotheses_json = json.dumps([h.model_dump() for h in hypotheses], indent=2)
+    authorization_matrix = build_authorization_matrix(all_results)
 
     prompt = f"""You are PANDA, an expert API security consultant writing a professional
 security assessment report. Synthesize all the evidence from your investigation into
@@ -53,7 +55,29 @@ a comprehensive, actionable report.
 Write like a senior penetration tester delivering findings to a development team.
 Be specific: cite exact HTTP requests and responses as evidence. Rate severity
 accurately — don't inflate or deflate. Provide actionable, specific remediation
-guidance (not generic advice).
+guidance (not generic advice). Treat OWASP classification as a separate adjudication
+step from deciding whether an observation is security-relevant.
+
+## OWASP Classification Rules
+Use the narrowest category supported by the executed evidence. A successful response
+alone is not proof of a vulnerability category.
+- API1 BOLA requires an object identifier controlled by the client and evidence that
+    one principal can access another principal's object. A collection endpoint such as
+    GET /users/v1 is not BOLA by itself.
+- API3 BOPLA requires an unauthorized property to be returned or accepted, or clear
+    mass-assignment evidence. A debug endpoint exposing passwords is sensitive-data
+    exposure, but do not call it BOPLA unless the evidence demonstrates a property-level
+    authorization failure.
+- API5 requires a restricted function being usable by an unauthorized role.
+- API6 requires abuse of a sensitive business flow through excessive automated use;
+    a debug or data-disclosure endpoint is not API6.
+- API8 is appropriate for exposed debug functionality, unsafe defaults, verbose errors,
+    or other configuration failures when that is what the evidence demonstrates.
+- Use OTHER when the behavior is real but does not fit an OWASP API Top 10 category.
+
+For every finding, separately score observation_confidence and classification_confidence.
+Set overall confidence no higher than the weaker of those two scores. Do not convert
+HTTP 200 into 100% vulnerability or classification confidence.
 
 ## API Understanding
 {understanding.model_dump_json(indent=2)}
@@ -66,6 +90,13 @@ guidance (not generic advice).
 
 ## Analysis Notes
 {analyses_summary}
+
+## Authorization Matrix Evidence
+{json.dumps(authorization_matrix, indent=2, default=str)}
+
+Treat this matrix as observed access behavior, not proof of object ownership. A
+cross-profile comparison is necessary for BOLA analysis but is not sufficient unless
+the object identifier and ownership relationship are also established.
 
 ## OWASP Categories for Reference
 - API1:2023-BOLA, API2:2023-Broken-Authentication,
@@ -94,7 +125,10 @@ Return ONLY a JSON object:
       "evidence": ["Specific HTTP request/response evidence..."],
       "impact": "What an attacker could achieve...",
       "remediation": "Specific, actionable fix...",
-    "confidence": 0.9,
+        "confidence": 0.8,
+        "observation_confidence": 0.95,
+        "classification_confidence": 0.85,
+        "classification_rationale": "Explain why this category fits the evidence and why the closest alternatives do not.",
     "evidence_test_ids": ["T1"],
     "evidence_request_ids": ["request-id"],
     "validation_checks": ["API_ROUTE_VALIDATED"],
@@ -103,7 +137,17 @@ Return ONLY a JSON object:
   ],
   "positive_observations": ["Security controls that are working correctly..."],
   "methodology_notes": "Brief description of testing methodology...",
-  "limitations": ["Read-only testing only", "No authentication bypass attempts", "..."]
+    "limitations": ["Read-only testing only", "No authentication bypass attempts", "..."],
+    "coverage": [
+        {{"category": "BOLA", "status": "NOT_CONCLUSIVELY_TESTED", "basis": "No cross-principal object test was executed."}},
+        {{"category": "BOPLA", "status": "PARTIAL", "basis": "..."}},
+        {{"category": "BFLA", "status": "NOT_TESTED", "basis": "..."}},
+        {{"category": "Injection", "status": "NOT_TESTED", "basis": "..."}},
+        {{"category": "Rate limiting", "status": "NOT_TESTED", "basis": "..."}}
+        ],
+    "authorization_matrix": [
+        {{"endpoint": "/users/{{username}}", "profiles": [{{"auth_profile": "anonymous", "status_code": 401}}], "comparison_status": "SINGLE_PROFILE"}}
+    ]
 }}"""
 
     content, _ = _llm_call(llm, prompt, events, "report_generator", "synthesizing final security report")
@@ -120,6 +164,8 @@ Return ONLY a JSON object:
         )
 
     report.findings = _evidence_gate(report.findings, all_results)
+    _normalize_finding_confidence(report.findings)
+    report.authorization_matrix = authorization_matrix
     if not all_results:
         report.findings = []
         report.executive_summary = (
@@ -168,6 +214,20 @@ def _evidence_gate(findings: list[Any], results: list[ProbeResult]) -> list[Any]
         })
         gated.append(finding)
     return gated
+
+
+def _normalize_finding_confidence(findings: list[Any]) -> None:
+    """Keep confidence dimensions consistent even when the model omits fields."""
+    for finding in findings:
+        if finding.observation_confidence == 0.0:
+            finding.observation_confidence = finding.confidence
+        if finding.classification_confidence == 0.0:
+            finding.classification_confidence = finding.confidence
+        finding.confidence = min(
+            finding.confidence,
+            finding.observation_confidence,
+            finding.classification_confidence,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -225,12 +285,19 @@ def _render_markdown_report(
                 f"| **Severity** | {finding.severity} |",
                 f"| **OWASP Category** | {finding.owasp_category} |",
                 f"| **Confidence** | {finding.confidence:.0%} |",
+                f"| **Observation Confidence** | {finding.observation_confidence:.0%} |",
+                f"| **Classification Confidence** | {finding.classification_confidence:.0%} |",
                 "",
                 f"**Description:** {finding.description}",
                 "",
                 f"**Impact:** {finding.impact}",
                 "",
             ])
+            if finding.classification_rationale:
+                lines.extend([
+                    f"**Classification Rationale:** {finding.classification_rationale}",
+                    "",
+                ])
             if finding.evidence:
                 lines.append("**Evidence:**")
                 for ev in finding.evidence:
@@ -259,6 +326,39 @@ def _render_markdown_report(
         lines.extend(["---", "", "## Positive Observations", ""])
         for obs in report.positive_observations:
             lines.append(f"- ✅ {obs}")
+        lines.append("")
+
+    # Explicitly distinguish tested coverage from untested attack surface.
+    if report.coverage:
+        lines.extend(["---", "", "## Coverage Summary", ""])
+        lines.extend([
+            "| Category | Status | Basis |",
+            "|----------|--------|-------|",
+        ])
+        for item in report.coverage:
+            lines.append(
+                f"| {item.get('category', 'Unspecified')} | "
+                f"{item.get('status', 'UNSPECIFIED')} | "
+                f"{item.get('basis', '')} |"
+            )
+        lines.append("")
+
+    if report.authorization_matrix:
+        lines.extend(["---", "", "## Authorization Matrix", ""])
+        lines.extend([
+            "Observed responses by endpoint and auth profile. This does not establish object ownership.",
+            "",
+            "| Endpoint | Profile | Role | Status | Fields | Comparison |",
+            "|----------|---------|------|--------|--------|------------|",
+        ])
+        for route in report.authorization_matrix:
+            for profile in route.get("profiles", []):
+                lines.append(
+                    f"| `{route.get('endpoint', '')}` | `{profile.get('auth_profile', '')}` | "
+                    f"{profile.get('role') or '-'} | {profile.get('status_code', '')} | "
+                    f"{', '.join(profile.get('response_fields', [])) or '-'} | "
+                    f"{route.get('comparison_status', '')} |"
+                )
         lines.append("")
 
     # Threat model

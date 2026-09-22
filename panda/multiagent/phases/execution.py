@@ -158,7 +158,47 @@ def _apply_validation_checks(results: list[ProbeResult]) -> None:
         if len(statuses) > 1 and len(profiles) > 1:
             for result in path_results:
                 result.validation_checks.append("AUTH_PROFILE_STATUS_DIFFERENTIAL")
+        principals = {
+            result.principal_id
+            for result in path_results
+            if result.principal_id
+        }
+        if len(principals) > 1:
+            for result in path_results:
+                result.validation_checks.append("CROSS_PRINCIPAL_COMPARISON")
         hashes = {result.response_body_sha256 for result in path_results if result.response_body_sha256}
         if len(hashes) == 1 and len(profiles) > 1:
             for result in path_results:
                 result.validation_checks.append("AUTH_PROFILE_BODY_EQUIVALENT")
+
+
+def build_authorization_matrix(results: list[ProbeResult]) -> list[dict[str, Any]]:
+    """Summarize observed access by route and profile without inferring ownership."""
+    matrix: dict[str, dict[str, Any]] = {}
+    for result in results:
+        if result.route_classification not in {"DOCUMENTED_API_ROUTE", "DISCOVERED_API_ROUTE"}:
+            continue
+        route = matrix.setdefault(result.path, {
+            "endpoint": result.path,
+            "profiles": [],
+            "object_testable": "{" in result.path or bool(result.path.rstrip("/").split("/")[-1]),
+        })
+        route["profiles"].append({
+            "auth_profile": result.auth_profile,
+            "principal_id": result.principal_id,
+            "role": result.role,
+            "method": result.method,
+            "status_code": result.status_code,
+            "response_fields": result.response_fields,
+            "validation_checks": result.validation_checks,
+        })
+    for route in matrix.values():
+        unique_profiles = {}
+        for profile in route["profiles"]:
+            unique_profiles[profile["auth_profile"]] = profile
+        route["profiles"] = list(unique_profiles.values())
+        route["comparison_status"] = (
+            "COMPARED"
+            if len(route["profiles"]) > 1 else "SINGLE_PROFILE"
+        )
+    return list(matrix.values())

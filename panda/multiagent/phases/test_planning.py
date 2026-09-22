@@ -51,7 +51,12 @@ Each test should have a clear purpose: what it tests, what you expect to see
 if the vulnerability exists, and what a secure response looks like.
 
 ## Rules
-- Use GET, HEAD, or OPTIONS by default. Write methods are available only in explicit lab mode.
+- Use GET, HEAD, or OPTIONS by default. This run's explicit write capability is: {allow_write}.
+- If write capability is false, do not propose POST, PUT, PATCH, or DELETE.
+- If write capability is true, use documented request schemas and prefer isolated test
+    identities or harmless updates. Treat DELETE, database reset, bulk actions, and
+    destructive state changes as requiring explicit lab authorization; never infer that
+    allow_write makes every destructive action safe.
 - You may test any endpoint path — documented or discovered during recon
 - Use ONLY the available auth profiles
 - Use concrete path parameter values (e.g., 1, 2, 99) for parameterized paths
@@ -134,6 +139,44 @@ Return ONLY a JSON array of test cases:
         ]
         tests = target_tests + tests
 
+    # Force paired read probes for object-like documented routes. These probes
+    # establish a comparison matrix; the analyst still needs ownership evidence
+    # before classifying a result as BOLA.
+    existing_probes = {
+        (test.method.upper(), test.path, test.auth_profile)
+        for test in tests
+    }
+    profile_names = discovery.get("auth_profiles_available", [])
+    object_profiles = [name for name in profile_names if name != "anonymous"] or profile_names
+    bola_hypothesis = next(
+        (hypothesis for hypothesis in hypotheses if hypothesis.owasp_category == "API1:2023-BOLA"),
+        None,
+    )
+    if bola_hypothesis and len(object_profiles) >= 2:
+        for template in discovery.get("documented_paths", {}):
+            if "{" not in template:
+                continue
+            concrete = re.sub(
+                r"\{([^}]+)\}",
+                lambda match: "name1" if "user" in match.group(1).lower() or "name" in match.group(1).lower() else "1",
+                template,
+            )
+            for profile_name in object_profiles[:3]:
+                key = ("GET", concrete, profile_name)
+                if key in existing_probes:
+                    continue
+                tests.append(TestCase(
+                    id=f"BOLA-{len(tests) + 1}",
+                    hypothesis_id=bola_hypothesis.id,
+                    method="GET",
+                    path=concrete,
+                    auth_profile=profile_name,
+                    reasoning="Compare the same object identifier across principals as a prerequisite for BOLA analysis.",
+                    expected_if_vulnerable="A principal receives another principal's object without authorization.",
+                    expected_if_safe="Access is denied or limited to an object owned by the requesting principal.",
+                ))
+                existing_probes.add(key)
+
     # Only probe routes that are documented or positively classified as API routes.
     allowed_methods = {"GET", "HEAD", "OPTIONS"}
     if allow_write:
@@ -169,6 +212,10 @@ Return ONLY a JSON array of test cases:
             test.path in known_paths
             or base_path in known_paths
             or base_path_alt in known_paths
+            or any(
+                re.fullmatch(re.sub(r"\{[^}]+\}", r"[^/]+", template), test.path)
+                for template in known_paths if "{" in template
+            )
         )
         if not path_ok:
             classification = route_classes.get(test.path, "UNVERIFIED")

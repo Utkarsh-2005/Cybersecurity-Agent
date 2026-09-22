@@ -373,10 +373,20 @@ class Finding(BaseModel):
     remediation: str = Field(description="Specific, actionable remediation guidance.")
     confidence: float = Field(
         ge=0.0, le=1.0,
-        description="Confidence that this is a real vulnerability.",
+        description="Overall confidence, bounded by the observed behavior and classification confidence.",
     )
-    observation_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    classification_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    observation_confidence: float = Field(
+        default=0.0, ge=0.0, le=1.0,
+        description="Confidence that the cited behavior actually occurred in the executed evidence.",
+    )
+    classification_confidence: float = Field(
+        default=0.0, ge=0.0, le=1.0,
+        description="Confidence that the selected OWASP category accurately describes the demonstrated behavior.",
+    )
+    classification_rationale: str = Field(
+        default="",
+        description="Evidence-based explanation for the selected OWASP category and why nearby categories were rejected.",
+    )
     evidence_test_ids: list[str] = Field(default_factory=list)
     evidence_request_ids: list[str] = Field(default_factory=list)
     validation_checks: list[str] = Field(default_factory=list)
@@ -408,3 +418,7 @@ class SecurityReport(BaseModel):
         description="Limitations of this assessment (read-only, no auth bypass attempts, etc.).",
     )
     coverage: list[dict[str, str]] = Field(default_factory=list)
+    authorization_matrix: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Observed endpoint access by auth profile, including status and response shape.",
+    )
