@@ -11,6 +11,7 @@ from panda.tools import LiveHTTPExecutor
 
 from .phases.execution import _execute_and_analyze
 from .phases.recon import _discover_api
+from .phases.recon_loop import _run_recon_loop
 from .phases.reporting import (
     _generate_report,
     _render_markdown_report,
@@ -25,7 +26,7 @@ from .utils import _auth_profiles, _build_llm, _emit_event
 _MAX_INVESTIGATION_ITERATIONS = 3
 
 
-def run_panda_assessment(target_url: str, *, allow_write: bool = True) -> str:
+def run_panda_assessment(target_url: str, *, allow_write: bool = False) -> str:
     """Run the full LLM-driven PANDA security assessment pipeline."""
 
     print("\n" + "=" * 60)
@@ -63,6 +64,12 @@ def run_panda_assessment(target_url: str, *, allow_write: bool = True) -> str:
         allow_write=allow_write,
     )
 
+    # --- Phase 1b: bounded LLM-guided reconnaissance ---
+    print("\n" + "-" * 40)
+    print("  Phase 1b: LLM Reconnaissance Loop")
+    print("-" * 40)
+    recon_results = _run_recon_loop(discovery, executor, llm, events)
+
     # --- Phase 2: API Understanding ---
     print("\n" + "-" * 40)
     print("  Phase 2: API Understanding (LLM)")
@@ -76,7 +83,7 @@ def run_panda_assessment(target_url: str, *, allow_write: bool = True) -> str:
     hypotheses = _model_threats(discovery, understanding, llm, events)
 
     # --- Phase 4+5: Investigation Loop ---
-    all_results: list[ProbeResult] = []
+    all_results: list[ProbeResult] = list(recon_results)
     all_analyses: list[TestAnalysis] = []
 
     for iteration in range(1, _MAX_INVESTIGATION_ITERATIONS + 1):
@@ -88,6 +95,7 @@ def run_panda_assessment(target_url: str, *, allow_write: bool = True) -> str:
             discovery, understanding, hypotheses, llm, events,
             previous_results=all_results if all_results else None,
             iteration=iteration,
+            allow_write=allow_write,
         )
         if not tests:
             print("[pipeline] No tests generated, ending investigation.")

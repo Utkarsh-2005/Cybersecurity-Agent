@@ -24,6 +24,7 @@ def _plan_investigation(
     events: list[dict[str, Any]],
     previous_results: list[ProbeResult] | None = None,
     iteration: int = 1,
+    allow_write: bool = False,
 ) -> list[TestCase]:
     """Ask the LLM to design specific test cases for the top hypotheses."""
 
@@ -50,7 +51,7 @@ Each test should have a clear purpose: what it tests, what you expect to see
 if the vulnerability exists, and what a secure response looks like.
 
 ## Rules
-- You may use GET, HEAD, POST, PUT, PATCH, or DELETE methods as appropriate
+- Use GET, HEAD, or OPTIONS by default. Write methods are available only in explicit lab mode.
 - You may test any endpoint path — documented or discovered during recon
 - Use ONLY the available auth profiles
 - Use concrete path parameter values (e.g., 1, 2, 99) for parameterized paths
@@ -65,8 +66,17 @@ if the vulnerability exists, and what a secure response looks like.
 ## Available Auth Profiles
 {json.dumps(discovery.get('auth_profiles_available', []))}
 
+## Auth Profile Metadata
+{json.dumps(discovery.get('auth_profile_metadata', {}))}
+
 ## Documented Endpoints  
 {json.dumps(discovery.get('documented_paths', {}), indent=2)}
+
+## Configured Target Route
+{json.dumps(discovery.get('target_route', {}), indent=2)}
+
+Use the configured target route as the first probe when it is present. Do not
+rename it or replace it with a guessed synonym.
 
 ## Threat Hypotheses to Investigate
 {hypotheses_json}
@@ -100,13 +110,43 @@ Return ONLY a JSON array of test cases:
         print(f"[test_planner] Warning: could not parse test plan: {exc}")
         tests = []
 
-    # Safety validation — flexible method allowance, lenient path matching
-    allowed_methods = {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"}
+    target_route = discovery.get("target_route") or {}
+    target_path = target_route.get("path")
+    if target_path:
+        existing_target_tests = {test.path.rstrip("/") for test in tests}
+        hypothesis_id = hypotheses[0].id if hypotheses else "H1"
+        target_tests = [
+            TestCase(
+                id=f"TARGET-{index}",
+                hypothesis_id=hypothesis_id,
+                method="GET",
+                path=target_path,
+                auth_profile=profile_name,
+                reasoning="Baseline probe of the user-configured target route.",
+                expected_if_vulnerable="A route-specific security-relevant response requiring further analysis.",
+                expected_if_safe="A valid route response without unauthorized data exposure.",
+            )
+            for index, profile_name in enumerate(
+                discovery.get("auth_profiles_available", []), start=1
+            )
+            if profile_name in discovery.get("auth_profiles_available", [])
+            and target_path.rstrip("/") not in existing_target_tests
+        ]
+        tests = target_tests + tests
+
+    # Only probe routes that are documented or positively classified as API routes.
+    allowed_methods = {"GET", "HEAD", "OPTIONS"}
+    if allow_write:
+        allowed_methods |= {"POST", "PUT", "PATCH", "DELETE"}
     safe_tests = []
     known_paths = set(discovery.get("documented_paths", {}).keys())
-    # Also include paths discovered during undocumented probing
+    route_classes = {
+        uf.get("path"): uf.get("route_classification")
+        for uf in discovery.get("undocumented_findings", [])
+    }
     for uf in discovery.get("undocumented_findings", []):
-        known_paths.add(uf.get("path", ""))
+        if uf.get("route_classification") == "DISCOVERED_API_ROUTE":
+            known_paths.add(uf.get("path", ""))
     # Add paths observed in baseline results
     for br in discovery.get("baseline_results", []):
         known_paths.add(br.get("path", ""))
@@ -119,20 +159,22 @@ Return ONLY a JSON array of test cases:
             _emit_event(events, "safety", "rejected test", "policy",
                         f"{test.id}: method {method} not recognized")
             continue
-        # Lenient path matching: accept if any known path is a prefix or
-        # if the test path (with IDs replaced) matches a known template
+        if test.auth_profile not in discovery.get("auth_profiles_available", []):
+            _emit_event(events, "safety", "rejected test", "policy",
+                        f"{test.id}: auth profile {test.auth_profile} is unavailable")
+            continue
         base_path = re.sub(r"/\d+", "/{id}", test.path)
-        # Also try common parameter patterns
         base_path_alt = re.sub(r"/\d+", "/{user_id}", test.path)
         path_ok = (
             test.path in known_paths
             or base_path in known_paths
             or base_path_alt in known_paths
-            or any(test.path.startswith(dp.split("{")[0].rstrip("/")) for dp in known_paths if dp)
         )
         if not path_ok:
-            _emit_event(events, "safety", "warning", "policy",
-                        f"{test.id}: path {test.path} not in known endpoints (allowing anyway)")
+            classification = route_classes.get(test.path, "UNVERIFIED")
+            _emit_event(events, "safety", "rejected test", "policy",
+                        f"{test.id}: path {test.path} is {classification}, not a validated API route")
+            continue
         safe_tests.append(test)
 
     print(f"\n[test_planner] === Test Plan ({len(safe_tests)} tests, iteration {iteration}) ===")

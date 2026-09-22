@@ -34,7 +34,10 @@ and relationships, then note security-relevant observations.
 ## API Information
 - Title: {discovery.get('api_title', 'Unknown')}
 - Version: {discovery.get('api_version', 'Unknown')}
+- Target identity: {json.dumps(discovery.get('target_identity', {}))}
+- Target path: {discovery.get('target_path', '/')}
 - Auth profiles available: {json.dumps(discovery.get('auth_profiles_available', []))}
+- Auth profile metadata: {json.dumps(discovery.get('auth_profile_metadata', {}))}
 
 ## Response Header Fingerprints
 {json.dumps(discovery.get('header_fingerprints', {}), indent=2)}

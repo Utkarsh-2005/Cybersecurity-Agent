@@ -6,6 +6,7 @@ Execute test probes and ask the LLM to analyze the results.
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from typing import Any
 
 from langchain_openai import ChatOpenAI
@@ -39,6 +40,7 @@ def _execute_and_analyze(
     results: list[ProbeResult] = []
     for test in tests:
         result = executor.execute(test)
+        result.route_classification = _route_classification(result.path, discovery)
         results.append(result)
         status = result.status_code if result.status_code else f"ERROR: {result.error}"
         _emit_event(events, "executor", "called tool", "http_request",
@@ -46,6 +48,8 @@ def _execute_and_analyze(
         print(f"[executor] {result.method} {result.url} ({result.auth_profile}) -> {status} ({result.response_time_ms:.0f}ms)")
 
     # Ask LLM to analyze results
+    _apply_validation_checks(results)
+
     results_json = json.dumps(
         [r.model_dump() for r in results],
         indent=2, default=str,
@@ -66,6 +70,10 @@ response reveals — status codes, response bodies, differences between auth pro
 
 ## Test Results
 {results_json}
+
+## Deterministic Validation Rules
+Treat route classifications and validation checks as authoritative evidence. A
+frontend shell, unverified route, or status code alone cannot confirm a vulnerability.
 
 ## Instructions
 1. Analyze each result and what it reveals about security
@@ -116,3 +124,41 @@ Return ONLY a JSON object:
     print()
 
     return results, analysis
+
+
+def _route_classification(path: str, discovery: dict[str, Any]) -> str:
+    """Classify an executed test against the validated discovery inventory."""
+    if path in discovery.get("documented_paths", {}):
+        return "DOCUMENTED_API_ROUTE"
+    for finding in discovery.get("undocumented_findings", []):
+        if finding.get("path") == path:
+            return finding.get("route_classification", "UNVERIFIED")
+    for documented_path in discovery.get("documented_paths", {}):
+        prefix = documented_path.split("{", 1)[0].rstrip("/")
+        if prefix and path.startswith(prefix):
+            return "DOCUMENTED_API_ROUTE"
+    return "UNVERIFIED"
+
+
+def _apply_validation_checks(results: list[ProbeResult]) -> None:
+    """Add conservative, deterministic comparison signals for the LLM."""
+    by_path: dict[str, list[ProbeResult]] = defaultdict(list)
+    for result in results:
+        if result.route_classification in {"DOCUMENTED_API_ROUTE", "DISCOVERED_API_ROUTE"}:
+            result.validation_checks.append("API_ROUTE_VALIDATED")
+        else:
+            result.validation_checks.append("ROUTE_NOT_VALIDATED")
+        by_path[result.path].append(result)
+
+    for path_results in by_path.values():
+        if len(path_results) < 2:
+            continue
+        statuses = {result.status_code for result in path_results}
+        profiles = {result.auth_profile for result in path_results}
+        if len(statuses) > 1 and len(profiles) > 1:
+            for result in path_results:
+                result.validation_checks.append("AUTH_PROFILE_STATUS_DIFFERENTIAL")
+        hashes = {result.response_body_sha256 for result in path_results if result.response_body_sha256}
+        if len(hashes) == 1 and len(profiles) > 1:
+            for result in path_results:
+                result.validation_checks.append("AUTH_PROFILE_BODY_EQUIVALENT")

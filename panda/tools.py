@@ -9,7 +9,9 @@ never delegated to the LLM.
 from __future__ import annotations
 
 import json
+import hashlib
 import time
+import uuid
 from typing import Any
 from urllib.parse import urljoin
 
@@ -97,7 +99,8 @@ def safe_tool_registry():
 # Live HTTP executor — the real execution layer
 # ---------------------------------------------------------------------------
 
-_ALLOWED_METHODS = {"GET", "HEAD"}
+_READ_ONLY_METHODS = {"GET", "HEAD", "OPTIONS"}
+_WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _MAX_BODY_CAPTURE = 2000
 _DEFAULT_TIMEOUT = 8
 
@@ -107,8 +110,7 @@ class LiveHTTPExecutor:
     guardrails.
 
     Safety invariants (enforced in code, never by the LLM):
-    - Only GET/HEAD by default; other methods require ``allow_write=True``.
-    - Request bodies are never sent (even if allow_write is True in v1).
+    - Only GET/HEAD/OPTIONS by default; write methods require ``allow_write=True``.
     - Rate limiting: at most ``rate_limit`` requests per minute.
     - Response bodies are truncated before being stored / passed to the LLM.
     """
@@ -153,7 +155,10 @@ class LiveHTTPExecutor:
         self._enforce_rate_limit()
 
         url = urljoin(self.base_url, test.path.lstrip("/"))
-        headers = dict(self.auth_profiles.get(test.auth_profile, {}))
+        profile = self.auth_profiles.get(test.auth_profile, {})
+        headers = dict(profile.get("headers", profile) if isinstance(profile, dict) else {})
+        principal_id = profile.get("principal_id") if isinstance(profile, dict) else None
+        role = profile.get("role") if isinstance(profile, dict) else None
 
         # Send JSON body for POST/PUT/PATCH if provided
         json_body = test.request_body if test.request_body else None
@@ -174,7 +179,7 @@ class LiveHTTPExecutor:
             elapsed_ms = (time.perf_counter() - start) * 1000
 
             # Capture response body (truncated for LLM context)
-            body_summary = self._truncate_body(response)
+            body_summary, response_json = self._capture_body(response)
 
             # Capture interesting headers
             interesting_headers = self._extract_headers(response)
@@ -189,6 +194,17 @@ class LiveHTTPExecutor:
                 response_headers=interesting_headers,
                 response_body_summary=body_summary,
                 response_time_ms=round(elapsed_ms, 1),
+                request_id=str(uuid.uuid4()),
+                requested_url=url,
+                query_params=test.query_params,
+                principal_id=principal_id,
+                role=role,
+                content_type=response.headers.get("content-type", ""),
+                content_length=len(response.content),
+                response_body_sha256=hashlib.sha256(response.content).hexdigest(),
+                response_json=response_json,
+                response_fields=sorted(response_json.keys()) if isinstance(response_json, dict) else [],
+                redirect_chain=[item.url for item in response.history],
             )
 
         except requests.RequestException as exc:
@@ -211,16 +227,16 @@ class LiveHTTPExecutor:
     # ----- internal helpers -----
 
     def _method_allowed(self, method: str) -> bool:
-        if method in _ALLOWED_METHODS:
+        if method in _READ_ONLY_METHODS:
             return True
-        if self.allow_write and method in {"POST", "PUT", "PATCH", "DELETE"}:
+        if self.allow_write and method in _WRITE_METHODS:
             return True
         return False
 
     def _effective_methods(self) -> set[str]:
-        methods = set(_ALLOWED_METHODS)
+        methods = set(_READ_ONLY_METHODS)
         if self.allow_write:
-            methods |= {"POST", "PUT", "PATCH", "DELETE"}
+            methods |= _WRITE_METHODS
         return methods
 
     def _enforce_rate_limit(self) -> None:
@@ -237,16 +253,17 @@ class LiveHTTPExecutor:
         self._request_timestamps.append(time.time())
 
     @staticmethod
-    def _truncate_body(response: requests.Response) -> str:
+    def _capture_body(response: requests.Response) -> tuple[str, dict[str, Any] | list[Any] | None]:
         try:
             data = response.json()
             text = json.dumps(data, indent=2, default=str)
         except (ValueError, TypeError):
+            data = None
             text = response.text or ""
 
         if len(text) > _MAX_BODY_CAPTURE:
-            return text[:_MAX_BODY_CAPTURE] + f"\n... [truncated, {len(text)} total chars]"
-        return text
+            return text[:_MAX_BODY_CAPTURE] + f"\n... [truncated, {len(text)} total chars]", data
+        return text, data
 
     @staticmethod
     def _extract_headers(response: requests.Response) -> dict[str, str]:

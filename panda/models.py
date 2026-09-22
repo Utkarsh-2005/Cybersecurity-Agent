@@ -254,6 +254,54 @@ class TestCase(BaseModel):
     )
 
 
+class ReconProbe(BaseModel):
+    """A bounded read-only probe used to resolve a reconnaissance knowledge gap."""
+    id: str
+    path: str
+    method: Literal["GET", "HEAD"] = "GET"
+    auth_profile: str = "anonymous"
+    knowledge_gap: str
+    purpose: str
+    expected_observation: str
+    disconfirming_observation: str
+
+
+class ReconPlan(BaseModel):
+    """LLM request for the next bounded reconnaissance step."""
+    reasoning: str = ""
+    probes: list[ReconProbe] = Field(default_factory=list)
+    should_continue: bool = False
+    stop_reason: str = ""
+
+
+class HTTPResponseLog(BaseModel):
+    """Sanitized, structured HTTP evidence shared with analysis phases."""
+    request_id: str
+    test_id: str | None = None
+    method: str
+    requested_url: str
+    final_url: str
+    path: str
+    query_params: dict[str, str] = Field(default_factory=dict)
+    auth_profile: str
+    principal_id: str | None = None
+    role: str | None = None
+    status_code: int
+    response_headers: dict[str, str] = Field(default_factory=dict)
+    content_type: str = ""
+    content_length: int | None = None
+    response_body: str = ""
+    response_body_sha256: str = ""
+    response_json: dict[str, Any] | list[Any] | None = None
+    response_fields: list[str] = Field(default_factory=list)
+    response_time_ms: float = 0.0
+    redirect_chain: list[str] = Field(default_factory=list)
+    route_classification: str = "UNVERIFIED"
+    is_html_shell: bool = False
+    validation_checks: list[str] = Field(default_factory=list)
+    error: str | None = None
+
+
 class ProbeResult(BaseModel):
     """Result of executing a single test probe against the real API."""
     test_id: str
@@ -268,6 +316,20 @@ class ProbeResult(BaseModel):
         description="Truncated response body for analysis (max ~2000 chars).",
     )
     response_time_ms: float = 0.0
+    request_id: str = ""
+    requested_url: str = ""
+    query_params: dict[str, str] = Field(default_factory=dict)
+    principal_id: str | None = None
+    role: str | None = None
+    content_type: str = ""
+    content_length: int | None = None
+    response_body_sha256: str = ""
+    response_json: dict[str, Any] | list[Any] | None = None
+    response_fields: list[str] = Field(default_factory=list)
+    redirect_chain: list[str] = Field(default_factory=list)
+    route_classification: str = "UNVERIFIED"
+    is_html_shell: bool = False
+    validation_checks: list[str] = Field(default_factory=list)
     error: str | None = None
 
 
@@ -313,6 +375,12 @@ class Finding(BaseModel):
         ge=0.0, le=1.0,
         description="Confidence that this is a real vulnerability.",
     )
+    observation_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    classification_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence_test_ids: list[str] = Field(default_factory=list)
+    evidence_request_ids: list[str] = Field(default_factory=list)
+    validation_checks: list[str] = Field(default_factory=list)
+    route_classification: str = "UNVERIFIED"
 
 
 class SecurityReport(BaseModel):
@@ -339,3 +407,4 @@ class SecurityReport(BaseModel):
         default_factory=list,
         description="Limitations of this assessment (read-only, no auth bypass attempts, etc.).",
     )
+    coverage: list[dict[str, str]] = Field(default_factory=list)

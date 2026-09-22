@@ -37,7 +37,7 @@ def _generate_report(
 
     # Compile evidence summary
     results_summary = json.dumps(
-        [r.model_dump(exclude={"response_headers"}) for r in all_results],
+        [r.model_dump() for r in all_results],
         indent=2, default=str,
     )
     analyses_summary = json.dumps(
@@ -94,7 +94,11 @@ Return ONLY a JSON object:
       "evidence": ["Specific HTTP request/response evidence..."],
       "impact": "What an attacker could achieve...",
       "remediation": "Specific, actionable fix...",
-      "confidence": 0.9
+    "confidence": 0.9,
+    "evidence_test_ids": ["T1"],
+    "evidence_request_ids": ["request-id"],
+    "validation_checks": ["API_ROUTE_VALIDATED"],
+    "route_classification": "DOCUMENTED_API_ROUTE"
     }}
   ],
   "positive_observations": ["Security controls that are working correctly..."],
@@ -115,7 +119,55 @@ Return ONLY a JSON object:
             api_overview=understanding.business_context,
         )
 
+    report.findings = _evidence_gate(report.findings, all_results)
+    if not all_results:
+        report.findings = []
+        report.executive_summary = (
+            "No security findings were confirmed because no validated API probes were executed. "
+            "The target contract or route inventory was insufficient for safe testing."
+        )
+        report.api_overview = (
+            f"{understanding.api_type}. Reconnaissance identified no validated route that could "
+            "be tested safely during this run."
+        )
+        report.methodology_notes = (
+            "Reconnaissance and hypothesis generation completed, but test execution did not start "
+            "because the planner produced no validated probes."
+        )
+        report.limitations = list(dict.fromkeys([
+            *report.limitations,
+            "No validated API probes were executed.",
+            "This is not evidence that the target is secure.",
+        ]))
     return report
+
+
+def _evidence_gate(findings: list[Any], results: list[ProbeResult]) -> list[Any]:
+    """Keep only findings linked to executed, validated API evidence."""
+    result_by_id = {result.test_id: result for result in results}
+    gated = []
+    for finding in findings:
+        linked = [
+            result_by_id[test_id]
+            for test_id in finding.evidence_test_ids
+            if test_id in result_by_id
+        ]
+        if not linked:
+            continue
+        if any(
+            result.route_classification not in {"DOCUMENTED_API_ROUTE", "DISCOVERED_API_ROUTE"}
+            for result in linked
+        ):
+            continue
+        finding.evidence_request_ids = [
+            result.request_id for result in linked if result.request_id
+        ]
+        finding.route_classification = linked[0].route_classification
+        finding.validation_checks = sorted({
+            check for result in linked for check in result.validation_checks
+        })
+        gated.append(finding)
+    return gated
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +235,12 @@ def _render_markdown_report(
                 lines.append("**Evidence:**")
                 for ev in finding.evidence:
                     lines.append(f"- {ev}")
+                lines.append("")
+            if finding.evidence_test_ids:
+                lines.append(f"**Evidence Tests:** `{', '.join(finding.evidence_test_ids)}`")
+                lines.append(f"**Request IDs:** `{', '.join(finding.evidence_request_ids)}`")
+                lines.append(f"**Validation:** `{', '.join(finding.validation_checks)}`")
+                lines.append(f"**Route Classification:** `{finding.route_classification}`")
                 lines.append("")
             lines.extend([
                 f"**Remediation:** {finding.remediation}",

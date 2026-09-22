@@ -7,13 +7,14 @@ fingerprinting.
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from typing import Any
 from urllib.parse import urljoin
 
 import requests
 
-from ..utils import _auth_profiles, _base_url, _emit_event
+from ..utils import _auth_profiles, _base_url, _emit_event, _profile_headers, _profile_metadata, _target_url
 
 
 # Common paths that may exist but not be documented in OpenAPI specs
@@ -45,6 +46,23 @@ def _fingerprint_headers(resp: requests.Response) -> dict[str, str]:
     }
 
 
+def _classify_response(
+    response: requests.Response,
+    root_signature: tuple[str, str, int, str] | None,
+) -> tuple[str, bool, str]:
+    content_type = response.headers.get("content-type", "").lower()
+    body = response.content
+    body_hash = hashlib.sha256(body).hexdigest()
+    signature = (content_type.split(";", 1)[0], body_hash, len(body), response.text[:120])
+    is_html = "text/html" in content_type
+    same_as_root = root_signature is not None and signature[:3] == root_signature[:3]
+    if "json" in content_type:
+        return "DISCOVERED_API_ROUTE", False, body_hash
+    if is_html and (same_as_root or "<html" in response.text[:500].lower()):
+        return "FRONTEND_CATCH_ALL", True, body_hash
+    return "UNVERIFIED", False, body_hash
+
+
 def _discover_api(
     target_url: str,
     events: list[dict[str, Any]],
@@ -52,8 +70,37 @@ def _discover_api(
     """Discover the target through its documentation, baseline probes,
     undocumented-path probing, and header fingerprinting."""
     base_url = _base_url(target_url)
+    target = _target_url(target_url)
     session = requests.Session()
     session.headers.update({"User-Agent": "PANDA-discovery/1.0"})
+
+    target_identity: dict[str, Any] = {
+        "requested_url": target_url,
+        "path": target.path,
+    }
+    target_route: dict[str, Any] | None = None
+    try:
+        identity_response = session.get(target_url, timeout=5)
+        identity_content_type = identity_response.headers.get("content-type", "")
+        target_identity.update({
+            "status_code": identity_response.status_code,
+            "content_type": identity_content_type,
+            "title": re.search(r"<title[^>]*>(.*?)</title>", identity_response.text, re.I | re.S).group(1).strip()
+            if re.search(r"<title[^>]*>(.*?)</title>", identity_response.text, re.I | re.S)
+            else "",
+        })
+        if identity_response.ok and "json" in identity_content_type.lower():
+            target_route = {
+                "path": target.path.rstrip("/") or "/",
+                "get": {
+                    "summary": "Configured target route",
+                    "parameters": [],
+                    "responses": [str(identity_response.status_code)],
+                    "request_body": False,
+                },
+            }
+    except requests.RequestException as exc:
+        target_identity["error"] = str(exc)[:200]
 
     # --- Fetch OpenAPI schema (try multiple common locations) ---
     _emit_event(events, "recon", "started", "openapi_discovery", "learning the API contract")
@@ -104,11 +151,30 @@ def _discover_api(
             for method, op in operations.items()
             if method in {"get", "post", "put", "patch", "delete"} and isinstance(op, dict)
         }
+    if target_route and target_route["path"] not in documented_paths:
+        documented_paths[target_route["path"]] = {
+            "get": target_route["get"],
+        }
+        print(f"[recon] added configured target route {target_route['path']}")
 
     # --- Baseline probes: hit every GET endpoint with every auth profile ---
     profiles = _auth_profiles()
     baseline_results: list[dict[str, Any]] = []
     header_fingerprints: dict[str, dict[str, str]] = {}  # path -> headers
+
+    root_signature: tuple[str, str, int, str] | None = None
+    try:
+        root_response = session.get(base_url, timeout=5)
+        root_content_type = root_response.headers.get("content-type", "").lower()
+        root_signature = (
+            root_content_type.split(";", 1)[0],
+            hashlib.sha256(root_response.content).hexdigest(),
+            len(root_response.content),
+            root_response.text[:120],
+        )
+        header_fingerprints["/"] = _fingerprint_headers(root_response)
+    except requests.RequestException:
+        pass
 
     for path, operations in documented_paths.items():
         if "get" not in operations:
@@ -119,7 +185,7 @@ def _discover_api(
         for profile_name, headers in profiles.items():
             url = urljoin(base_url, path.lstrip("/"))
             try:
-                resp = session.get(url, headers=headers, timeout=5)
+                resp = session.get(url, headers=_profile_headers(headers), timeout=5)
                 result: dict[str, Any] = {
                     "path": path,
                     "auth_profile": profile_name,
@@ -154,7 +220,7 @@ def _discover_api(
             for profile_name, headers in profiles.items():
                 url = urljoin(base_url, concrete.lstrip("/"))
                 try:
-                    resp = session.get(url, headers=headers, timeout=5)
+                    resp = session.get(url, headers=_profile_headers(headers), timeout=5)
                     result = {
                         "path": path,
                         "concrete_path": concrete,
@@ -192,16 +258,22 @@ def _discover_api(
                 "path": probe_path,
                 "status_code": resp.status_code,
                 "content_type": resp.headers.get("content-type", ""),
+                "response_headers": _fingerprint_headers(resp),
             }
             if resp.status_code not in {404, 405}:
-                # Non-404 means something responded at this undocumented path
+                classification, is_html_shell, body_hash = _classify_response(resp, root_signature)
+                finding["route_classification"] = classification
+                finding["is_html_shell"] = is_html_shell
+                finding["response_body_sha256"] = body_hash
                 try:
                     body = resp.json()
                     finding["response_body"] = json.dumps(body, indent=2, default=str)[:500]
+                    finding["response_fields"] = sorted(body.keys()) if isinstance(body, dict) else []
                 except ValueError:
                     finding["response_body"] = resp.text[:500]
+                finding["response_fields"] = []
                 undocumented_findings.append(finding)
-                print(f"[recon]   {probe_path} -> {resp.status_code} [INTERESTING]")
+                print(f"[recon]   {probe_path} -> {resp.status_code} [{classification}]")
             else:
                 print(f"[recon]   {probe_path} -> {resp.status_code}")
         except requests.RequestException:
@@ -249,6 +321,9 @@ def _discover_api(
     return {
         "target_url": target_url,
         "base_url": base_url,
+        "target_path": target.path,
+        "target_identity": target_identity,
+        "target_route": target_route,
         "openapi_schema": schema,
         "api_title": schema.get("info", {}).get("title", ""),
         "api_version": schema.get("info", {}).get("version", ""),
@@ -257,4 +332,9 @@ def _discover_api(
         "undocumented_findings": undocumented_findings,
         "header_fingerprints": header_summary,
         "auth_profiles_available": list(profiles.keys()),
+        "auth_profile_metadata": {
+            name: _profile_metadata(profile)
+            for name, profile in profiles.items()
+            if isinstance(profile, dict)
+        },
     }

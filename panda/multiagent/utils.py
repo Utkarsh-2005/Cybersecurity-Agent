@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from dotenv import load_dotenv
@@ -57,11 +58,39 @@ def _build_llm(*, max_tokens: int = 2048) -> ChatOpenAI:
 # Utility helpers
 # ---------------------------------------------------------------------------
 
-def _base_url(target_url: str) -> str:
+@dataclass(frozen=True)
+class TargetURL:
+    """Normalized target identity while retaining the user-supplied path."""
+    original: str
+    origin: str
+    path: str
+
+
+def _target_url(target_url: str) -> TargetURL:
     parsed = urlparse(target_url)
     if not parsed.scheme or not parsed.netloc:
         raise ValueError("Target must be an absolute URL such as http://127.0.0.1:8000")
-    return f"{parsed.scheme}://{parsed.netloc}/"
+    path = parsed.path or "/"
+    if not path.endswith("/"):
+        path += "/"
+    return TargetURL(
+        original=target_url,
+        origin=f"{parsed.scheme}://{parsed.netloc}/",
+        path=path,
+    )
+
+
+def _base_url(target_url: str) -> str:
+    """Return the origin for absolute API route resolution."""
+    return _target_url(target_url).origin
+
+
+def _resolve_target_url(target_url: str, route: str) -> str:
+    """Resolve a route without silently dropping the configured target path."""
+    target = _target_url(target_url)
+    if route.startswith("/"):
+        return urljoin(target.origin, route.lstrip("/"))
+    return urljoin(urljoin(target.origin, target.path.lstrip("/")), route)
 
 
 def _extract_usage(response: Any) -> dict[str, Any]:
@@ -109,6 +138,20 @@ def _auth_profiles() -> dict[str, dict[str, str]]:
     if not isinstance(profiles, dict) or not all(isinstance(v, dict) for v in profiles.values()):
         raise ValueError("PANDA_AUTH_PROFILES_JSON must map profile names to HTTP header objects")
     return {"anonymous": {}, **profiles}
+
+
+def _profile_headers(profile: dict[str, Any]) -> dict[str, str]:
+    """Extract request headers from either legacy or metadata-rich profiles."""
+    headers = profile.get("headers", profile)
+    return dict(headers) if isinstance(headers, dict) else {}
+
+
+def _profile_metadata(profile: dict[str, Any]) -> dict[str, str | None]:
+    """Return non-secret identity metadata for prompts and evidence."""
+    return {
+        "principal_id": profile.get("principal_id"),
+        "role": profile.get("role"),
+    }
 
 
 # ---------------------------------------------------------------------------
