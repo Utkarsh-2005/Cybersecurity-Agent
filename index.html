@@ -1,970 +1,2176 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Multi-Agent Vulnerability and Endpoint Security System</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg: #eef0f2;
-    --panel: #ffffff;
-    --panel-alt: #f4f5f7;
-    --ink: #20242a;
-    --ink-soft: #5b6470;
-    --line: #d8dce1;
-    --line-strong: #c1c6cd;
-    --accent: #3a6ea5;
-    --accent-ink: #ffffff;
-    --accent-soft: #e4ecf4;
-    --risk: #b4532a;
-    --risk-soft: #f5e5dd;
-    --warn: #a5791f;
-    --warn-soft: #f4ecd8;
-    --ok: #3f7d58;
-    --ok-soft: #e1ede5;
-    --radius-s: 4px;
-    --radius-m: 8px;
-    --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
-  }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Multi-Agent Security Assessment</title>
+  <meta name="description"
+    content="Six autonomous agents. One coordinated pipeline. Real-time API vulnerability assessment.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg: #fbfbfd;
+      --bg-alt: #f5f5f7;
+      --surface: #ffffff;
+      --text-primary: #1d1d1f;
+      --text-secondary: #86868b;
+      --text-tertiary: #acacb0;
+      --border: rgba(0, 0, 0, 0.06);
+      --border-strong: rgba(0, 0, 0, 0.1);
+      --accent: #0071e3;
+      --accent-soft: rgba(0, 113, 227, 0.08);
+      --green: #30d158;
+      --green-soft: rgba(48, 209, 88, 0.1);
+      --orange: #ff9f0a;
+      --orange-soft: rgba(255, 159, 10, 0.1);
+      --red: #ff453a;
+      --red-soft: rgba(255, 69, 58, 0.1);
+      --shadow-s: 0 1px 2px rgba(0, 0, 0, 0.04);
+      --shadow-m: 0 2px 12px rgba(0, 0, 0, 0.06);
+      --shadow-l: 0 8px 30px rgba(0, 0, 0, 0.08);
+      --radius: 12px;
+      --radius-s: 8px;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+      --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+      --ease-out: cubic-bezier(0, 0, 0.25, 1);
+      --section-pad: 120px;
+    }
 
-  *{ box-sizing: border-box; }
-  html{ scroll-padding-top: env(safe-area-inset-top, 0px); scroll-behavior: smooth; }
-  body{
-    margin:0;
-    background: var(--bg);
-    color: var(--ink);
-    font-family: var(--font-ui);
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    -webkit-font-smoothing: antialiased;
-  }
-  img{ max-width:100%; }
-  a{ color: inherit; }
-  h1,h2,h3{ margin:0; font-weight:600; letter-spacing:-0.01em; }
-  p{ margin:0; }
-  button{ font-family: inherit; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-  :focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-  .wrap{ max-width: 1180px; margin: 0 auto; padding: 0 28px; }
-  @media (max-width: 560px){ .wrap{ padding: 0 18px; } }
+    body {
+      font-family: var(--font);
+      color: var(--text-primary);
+      background: var(--bg);
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
 
-  /* ---------- Top bar ---------- */
-  .topbar{
-    border-bottom: 1px solid var(--line);
-    background: var(--panel);
-  }
-  .topbar .wrap{
-    display:flex; align-items:center; justify-content:space-between;
-    height: 60px;
-  }
-  .brand{ display:flex; align-items:center; gap:10px; font-weight:600; font-size: 15px; }
-  .topbar nav{ display:flex; gap: 22px; font-size: 14px; color: var(--ink-soft); }
-  .topbar nav a{ text-decoration:none; }
-  .topbar nav a:hover{ color: var(--ink); }
-  @media (max-width: 720px){ .topbar nav{ display:none; } }
+    img {
+      max-width: 100%;
+      display: block;
+    }
 
-  /* ---------- Hero ---------- */
-  .hero{
-    background: var(--panel);
-    border-bottom: 1px solid var(--line);
-  }
-  .hero .wrap{
-    display:grid;
-    grid-template-columns: 1.3fr 0.9fr;
-    gap: 56px;
-    align-items: center;
-    padding-top: 64px;
-    padding-bottom: 56px;
-  }
-  @media (max-width: 900px){
-    .hero .wrap{ grid-template-columns: 1fr; padding-top: 40px; padding-bottom: 32px; gap: 32px; }
-  }
-  .hero-eyebrow{
-    font-size: 13px;
-    color: var(--accent);
-    font-weight: 500;
-    margin-bottom: 14px;
-  }
-  .hero h1{
-    font-size: clamp(32px, 4.4vw, 50px);
-    line-height: 1.08;
-    max-width: 15ch;
-  }
-  .hero p.lede{
-    margin-top: 18px;
-    font-size: 17px;
-    line-height: 1.55;
-    color: var(--ink-soft);
-    max-width: 46ch;
-  }
-  .hero-actions{ display:flex; gap: 12px; margin-top: 30px; flex-wrap: wrap; }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
 
-  .btn{
-    display:inline-flex; align-items:center; gap:8px;
-    border-radius: var(--radius-s);
-    padding: 12px 20px;
-    font-size: 14.5px;
-    font-weight: 600;
-    text-decoration:none;
-    border: 1px solid transparent;
-    cursor:pointer;
-    transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
-  }
-  .btn:active{ transform: translateY(1px); }
-  .btn-primary{ background: var(--accent); color: var(--accent-ink); }
-  .btn-primary:hover{ background:#325f8e; }
-  .btn-secondary{ background: transparent; color: var(--ink); border-color: var(--line-strong); }
-  .btn-secondary:hover{ border-color: var(--ink); }
-  .btn-quiet{ background: var(--panel-alt); color: var(--ink); border-color: var(--line); }
-  .btn-quiet:hover{ background: var(--accent-soft); }
-  .btn[disabled]{ opacity:.5; cursor:not-allowed; }
-  .btn .dot{ width:7px; height:7px; border-radius:50%; background: currentColor; }
+    a:hover {
+      text-decoration: underline;
+    }
 
-  /* hero live widget */
-  .hero-widget{
-    background: var(--panel-alt);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-m);
-    padding: 22px;
-  }
-  .hero-widget-top{
-    display:flex; align-items:center; justify-content:space-between;
-    margin-bottom: 18px;
-  }
-  .hero-widget-top span{ font-size: 13px; color: var(--ink-soft); }
-  .live-pill{
-    display:inline-flex; align-items:center; gap:6px;
-    font-size: 12px; font-weight:600; color: var(--ok);
-    background: var(--ok-soft); padding: 4px 9px; border-radius: 999px;
-  }
-  .live-pill .pulse-dot{
-    width:6px; height:6px; border-radius:50%; background: var(--ok);
-    animation: pulse-op 1.6s ease-in-out infinite;
-  }
-  .live-pill.paused{ color: var(--ink-soft); background: var(--panel); border:1px solid var(--line); }
-  .live-pill.paused .pulse-dot{ background: var(--ink-soft); animation:none; }
+    button {
+      font-family: inherit;
+      cursor: pointer;
+    }
 
-  .stat-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .stat{ background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 14px; }
-  .stat .n{ font-family: var(--font-mono); font-size: 24px; font-weight:600; }
-  .stat .l{ font-size: 12.5px; color: var(--ink-soft); margin-top:4px; }
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
 
-  /* ---------- Target picker ---------- */
-  .target-bar{
-    background: var(--panel-alt);
-    border-bottom: 1px solid var(--line);
-  }
-  .target-bar .wrap{ padding-top: 22px; padding-bottom: 22px; }
-  .target-row{ display:flex; align-items:center; gap: 14px; flex-wrap: wrap; }
-  .mode-switch{
-    display:inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-s);
-    padding: 3px; flex: none;
-  }
-  .mode-btn{
-    border: none; background: transparent; color: var(--ink-soft);
-    font-size: 13.5px; font-weight: 600; padding: 8px 14px; border-radius: 3px; cursor:pointer;
-  }
-  .mode-btn.active{ background: var(--ink); color: #fff; }
-  .mode-btn:hover:not(.active){ color: var(--ink); }
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
 
-  .target-form{ display:flex; align-items:center; gap: 10px; flex: 1 1 380px; min-width: 260px; }
-  .target-form[hidden]{ display:none; }
-  .url-field{ position:relative; flex: 1 1 auto; }
-  .url-field input{
-    width:100%; padding: 11px 14px; font-size: 14px; font-family: var(--font-mono);
-    border: 1px solid var(--line-strong); border-radius: var(--radius-s);
-    background: var(--panel); color: var(--ink);
-  }
-  .url-field input::placeholder{ color: #9aa2ac; }
-  .url-field input:focus{ border-color: var(--accent); }
-  .url-field input.invalid{ border-color: var(--risk); }
-  .target-form .btn{ flex: none; }
+    @media (min-width: 768px) {
+      .wrap {
+        padding: 0 40px;
+      }
+    }
 
-  .target-help{ font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
-  .target-help.error{ color: var(--risk); font-weight: 600; }
+    /* ——— Nav ——— */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      height: 52px;
+      background: rgba(251, 251, 253, 0.72);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
 
-  .target-active{
-    margin-top: 14px; display:flex; align-items:center; gap: 10px; font-size: 13px; color: var(--ink-soft);
-  }
-  .target-active strong{ color: var(--ink); font-family: var(--font-mono); font-weight: 600; }
-  .sim-note{
-    display:inline-flex; align-items:center; gap:6px;
-    background: var(--accent-soft); color: var(--accent);
-    font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
-  }
-  .sim-note[hidden]{ display:none; }
+    .nav .wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 100%;
+    }
 
-  /* ---------- Sections ---------- */
-  section{ padding: 64px 0; border-bottom: 1px solid var(--line); }
-  section:last-of-type{ border-bottom: none; }
-  .section-head{ display:flex; justify-content:space-between; align-items:flex-end; gap: 24px; margin-bottom: 30px; flex-wrap: wrap; }
-  .section-head h2{ font-size: 25px; }
-  .section-head p{ color: var(--ink-soft); font-size: 14.5px; margin-top: 6px; max-width: 52ch; }
+    .nav-brand {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
 
-  /* ---------- Workflow diagram ---------- */
-  .flow-svg-wrap{
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-m);
-    padding: 6px 6px 0;
-    margin-bottom: 26px;
-  }
-  .flow-svg-wrap svg{ display:block; width:100%; height:auto; }
-  .flow-caption{
-    font-size: 13px; line-height: 1.6; color: var(--ink-soft);
-    padding: 0 18px 18px; margin: 0;
-  }
+    .nav-links {
+      display: flex;
+      gap: 28px;
+    }
 
-  .langgraph-panel{
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-m);
-    overflow: hidden;
-    margin-top: 22px;
-  }
-  .langgraph-panel .panel-head{ padding: 13px 18px; }
-  .langgraph-intro{
-    font-size: 13.5px; line-height: 1.6; color: var(--ink-soft);
-    padding: 16px 18px 0;
-  }
-  .langgraph-intro em{ color: var(--ink); font-style: normal; font-weight: 600; }
-  .code-block{
-    margin: 14px 0 0;
-    padding: 16px 18px 18px;
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    line-height: 1.7;
-    color: var(--ink);
-    background: var(--panel-alt);
-    overflow-x: auto;
-    border-top: 1px solid var(--line);
-  }
-  .code-block code{ white-space: pre; }
+    .nav-links a {
+      font-size: 13px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.2s var(--ease);
+    }
 
-  .agent-grid{
-    display:grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 14px;
-  }
-  .agent-card{
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-m);
-    padding: 16px;
-    display:flex; flex-direction:column; gap: 10px;
-  }
-  .agent-card-top{ display:flex; align-items:center; gap:10px; }
-  .agent-icon{
-    width: 32px; height: 32px; flex:none;
-    border-radius: 7px;
-    background: var(--accent-soft);
-    display:flex; align-items:center; justify-content:center;
-  }
-  .agent-icon svg{ width:16px; height:16px; stroke: var(--accent); }
-  .agent-name{ font-size: 14.5px; font-weight:600; }
-  .agent-role{ font-size: 12.5px; color: var(--ink-soft); line-height:1.4; }
+    .nav-links a:hover {
+      color: var(--text-primary);
+      text-decoration: none;
+    }
 
-  .agent-status-row{ display:flex; align-items:center; justify-content:space-between; font-size:12px; }
-  .agent-status{ display:flex; align-items:center; gap:6px; font-weight:600; color: var(--ok); }
-  .agent-status .pulse-dot{ width:6px; height:6px; border-radius:50%; background: var(--ok); animation: pulse-op 1.4s ease-in-out infinite; }
-  .agent-status.idle{ color: var(--ink-soft); }
-  .agent-status.idle .pulse-dot{ background: var(--ink-soft); animation: none; }
-  .agent-count{ font-family: var(--font-mono); color: var(--ink-soft); }
+    @media (max-width: 600px) {
+      .nav-links {
+        display: none;
+      }
+    }
 
-  .progress-track{ height: 4px; background: var(--panel-alt); border-radius: 999px; overflow:hidden; }
-  .progress-fill{ height:100%; background: var(--accent); border-radius: 999px; width: 8%; transition: width 700ms ease; }
+    /* ——— Hero ——— */
+    .hero {
+      padding: calc(52px + 100px) 0 100px;
+      text-align: center;
+    }
 
-  .agent-log{
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    line-height: 1.6;
-    color: var(--ink-soft);
-    background: var(--panel-alt);
-    border-radius: var(--radius-s);
-    padding: 8px 10px;
-    height: 56px;
-    overflow: hidden;
-  }
-  .agent-log div{ white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
-  .agent-log div:last-child{ color: var(--ink); }
+    .hero-eyebrow {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      letter-spacing: 0.01em;
+    }
 
-  /* ---------- Endpoints + API columns ---------- */
-  .two-col{ display:grid; grid-template-columns: 1.2fr 0.8fr; gap: 22px; align-items:start; }
-  @media (max-width: 900px){ .two-col{ grid-template-columns: 1fr; } }
+    .hero h1 {
+      font-size: clamp(36px, 5.6vw, 64px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.06;
+      max-width: 14ch;
+      margin: 0 auto;
+      color: var(--text-primary);
+    }
 
-  .panel{
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-m);
-    overflow:hidden;
-  }
-  .panel-head{
-    display:flex; align-items:center; justify-content:space-between;
-    padding: 13px 16px;
-    border-bottom: 1px solid var(--line);
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .panel-head .sub{ font-weight:400; color: var(--ink-soft); font-family: var(--font-mono); font-size: 12px; }
+    .hero .lede {
+      font-size: clamp(17px, 2vw, 21px);
+      color: var(--text-secondary);
+      line-height: 1.5;
+      max-width: 42ch;
+      margin: 20px auto 0;
+    }
 
-  table{ width:100%; border-collapse: collapse; font-size: 13.5px; }
-  thead th{
-    text-align:left; font-weight:500; color: var(--ink-soft);
-    font-size: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line);
-  }
-  tbody td{ padding: 11px 16px; border-bottom: 1px solid var(--line); }
-  tbody tr:last-child td{ border-bottom:none; }
-  td.mono, th.mono{ font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-soft); }
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 36px;
+      flex-wrap: wrap;
+    }
 
-  .badge{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding: 4px 9px; border-radius: 999px; }
-  .badge .dot{ width:6px; height:6px; border-radius:50%; background: currentColor; }
-  .badge.online{ background: var(--ok-soft); color: var(--ok); }
-  .badge.scanning{ background: var(--accent-soft); color: var(--accent); }
-  .badge.scanning .dot{ animation: pulse-op 1.2s ease-in-out infinite; }
-  .badge.risk{ background: var(--risk-soft); color: var(--risk); }
+    /* ——— Buttons ——— */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 22px;
+      font-size: 15px;
+      font-weight: 500;
+      border-radius: 980px;
+      border: none;
+      transition: all 0.2s var(--ease);
+      text-decoration: none;
+      line-height: 1.2;
+    }
 
-  /* API log */
-  .api-log{
-    font-family: var(--font-mono);
-    font-size: 12px;
-    line-height: 1.9;
-    padding: 12px 16px;
-    height: 300px;
-    overflow-y: auto;
-    color: var(--ink-soft);
-  }
-  .api-log .m{ color: var(--accent); font-weight:600; }
-  .api-log .s2{ color: var(--ok); }
-  .api-log .s4{ color: var(--risk); }
-  .api-log div{ white-space: nowrap; }
+    .btn:hover {
+      text-decoration: none;
+    }
 
-  /* ---------- Findings ---------- */
-  .findings-list{ display:flex; flex-direction:column; gap: 10px; }
-  .finding{
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--line-strong);
-    border-radius: var(--radius-s);
-    padding: 13px 16px;
-    display:grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 16px;
-    align-items:center;
-    animation: slide-in 360ms ease;
-  }
-  .finding.sev-critical{ border-left-color: var(--risk); }
-  .finding.sev-high{ border-left-color: var(--warn); }
-  .finding.sev-medium{ border-left-color: var(--accent); }
-  .finding.sev-low{ border-left-color: var(--ok); }
-  .sev-chip{ font-size:11.5px; font-weight:700; padding: 4px 8px; border-radius: 4px; text-transform: none; letter-spacing: 0.01em; }
-  .sev-chip.sev-critical{ background: var(--risk-soft); color: var(--risk); }
-  .sev-chip.sev-high{ background: var(--warn-soft); color: var(--warn); }
-  .sev-chip.sev-medium{ background: var(--accent-soft); color: var(--accent); }
-  .sev-chip.sev-low{ background: var(--ok-soft); color: var(--ok); }
-  .finding-main .title{ font-size: 14px; font-weight:600; }
-  .finding-main .meta{ font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; font-family: var(--font-mono); }
-  .finding-time{ font-size: 12px; color: var(--ink-soft); font-family: var(--font-mono); white-space: nowrap; }
-  @media (max-width: 620px){
-    .finding{ grid-template-columns: 1fr; gap: 6px; }
-  }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
 
-  .findings-foot{ display:flex; justify-content:flex-end; margin-top: 18px; }
+    .btn-primary:hover {
+      background: #0077ed;
+    }
 
-  /* ---------- Footer ---------- */
-  footer{ padding: 40px 0 56px; }
-  footer .wrap{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap: 14px; }
-  footer p{ font-size: 13px; color: var(--ink-soft); }
-  footer a{ font-size: 13px; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+    .btn-primary:active {
+      background: #006edb;
+      transform: scale(0.98);
+    }
 
+    .btn-secondary {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--border-strong);
+    }
 
-  /* ---------- Terminal Console ---------- */
-  .terminal-wrap {
-    background: #111418;
-    color: #e4e7eb;
-    border-radius: var(--radius-m);
-    padding: 16px;
-    font-family: var(--font-mono);
-    font-size: 13px;
-    height: 400px;
-    overflow-y: auto;
-    border: 1px solid var(--ink);
-    margin-top: 24px;
-    line-height: 1.6;
-  }
-  .terminal-wrap .t-time { color: #5b6470; margin-right: 8px; }
-  .terminal-wrap .t-agent { color: var(--accent); font-weight: 600; margin-right: 8px; }
-  .terminal-wrap .t-event { color: #9aa2ac; margin-right: 8px; }
-  .terminal-wrap .t-detail { color: #e4e7eb; }
-  .terminal-wrap .t-error { color: var(--risk); }
+    .btn-secondary:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+    }
 
-  /* ---------- Phase Timeline ---------- */
-  .phase-timeline {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-m);
-    padding: 20px 24px;
-    position: relative;
-  }
-  .phase-step {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    z-index: 2;
-    position: relative;
-    flex: 1;
-    text-align: center;
-  }
-  .phase-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: var(--panel-alt);
-    border: 2px solid var(--line-strong);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--ink-soft);
-    font-size: 14px;
-    font-weight: 600;
-    transition: all 0.3s ease;
-  }
-  .phase-step.active .phase-icon {
-    border-color: var(--accent);
-    background: var(--accent-soft);
-    color: var(--accent);
-    box-shadow: 0 0 0 4px rgba(58, 110, 165, 0.15);
-  }
-  .phase-step.completed .phase-icon {
-    border-color: var(--ok);
-    background: var(--ok);
-    color: #fff;
-  }
-  .phase-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--ink-soft);
-  }
-  .phase-step.active .phase-label { color: var(--ink); }
-  .phase-step.completed .phase-label { color: var(--ink); }
-  
-  .phase-track {
-    position: absolute;
-    top: 35px;
-    left: 40px;
-    right: 40px;
-    height: 2px;
-    background: var(--line);
-    z-index: 1;
-  }
-  .phase-progress {
-    height: 100%;
-    background: var(--accent);
-    width: 0%;
-    transition: width 0.5s ease;
-  }
-  /* ---------- Animations ---------- */
-  @keyframes pulse-op{ 0%,100%{ opacity: 1; } 50%{ opacity: .25; } }
-  @keyframes slide-in{ from{ opacity:0; transform: translateY(-6px); } to{ opacity:1; transform:none; } }
+    .btn[disabled] {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
 
-  @media (prefers-reduced-motion: reduce){
-    .pulse-dot, .live-pill .pulse-dot, .badge.scanning .dot{ animation: none !important; }
-    .finding{ animation: none !important; }
-    .progress-fill{ transition: none !important; }
-  }
-</style>
+    /* ——— Stats Row ——— */
+    .stats-row {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      margin-top: 60px;
+      flex-wrap: wrap;
+    }
+
+    .stat-item {
+      text-align: center;
+    }
+
+    .stat-item .val {
+      font-size: 40px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text-primary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-item .label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* ——— Section ——— */
+    .section {
+      padding: var(--section-pad) 0;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+
+    .section-header h2 {
+      font-size: clamp(28px, 3.6vw, 44px);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.1;
+    }
+
+    .section-header p {
+      font-size: 17px;
+      color: var(--text-secondary);
+      max-width: 48ch;
+      margin: 12px auto 0;
+      line-height: 1.55;
+    }
+
+    .section-alt {
+      background: var(--bg-alt);
+    }
+
+    /* ——— Pipeline ——— */
+    .pipeline-track {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      position: relative;
+      max-width: 840px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    .pipeline-line {
+      position: absolute;
+      top: 24px;
+      left: 60px;
+      right: 60px;
+      height: 2px;
+      background: var(--border-strong);
+    }
+
+    .pipeline-line-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      transition: width 0.8s var(--ease);
+      border-radius: 1px;
+    }
+
+    .pipeline-node {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      z-index: 2;
+      flex: 0 0 auto;
+      width: 100px;
+      cursor: default;
+    }
+
+    .pipeline-dot {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--border-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.5s var(--ease);
+      position: relative;
+    }
+
+    .pipeline-dot svg {
+      width: 20px;
+      height: 20px;
+      stroke: var(--text-tertiary);
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: stroke 0.5s var(--ease);
+    }
+
+    .pipeline-node-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-tertiary);
+      margin-top: 12px;
+      text-align: center;
+      transition: color 0.5s var(--ease);
+      line-height: 1.3;
+    }
+
+    /* Pipeline States */
+    .pipeline-node.active .pipeline-dot {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 6px var(--accent-soft);
+    }
+
+    .pipeline-node.active .pipeline-dot svg {
+      stroke: var(--accent);
+    }
+
+    .pipeline-node.active .pipeline-node-label {
+      color: var(--text-primary);
+    }
+
+    .pipeline-node.complete .pipeline-dot {
+      border-color: var(--green);
+      background: var(--green);
+    }
+
+    .pipeline-node.complete .pipeline-dot svg {
+      stroke: #fff;
+    }
+
+    .pipeline-node.complete .pipeline-node-label {
+      color: var(--text-primary);
+    }
+
+    /* Pulse ring for active node */
+    .pipeline-node.active .pipeline-dot::after {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 1.5px solid var(--accent);
+      opacity: 0;
+      animation: ring-pulse 2s var(--ease-out) infinite;
+    }
+
+    @keyframes ring-pulse {
+      0% {
+        opacity: 0.5;
+        transform: scale(0.9);
+      }
+
+      100% {
+        opacity: 0;
+        transform: scale(1.3);
+      }
+    }
+
+    /* Pipeline description cards */
+    .pipeline-detail {
+      max-width: 640px;
+      margin: 48px auto 0;
+      min-height: 120px;
+    }
+
+    .pipeline-detail-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      box-shadow: var(--shadow-m);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.4s var(--ease), transform 0.4s var(--ease);
+      display: none;
+    }
+
+    .pipeline-detail-card.visible {
+      opacity: 1;
+      transform: none;
+      display: block;
+    }
+
+    .pipeline-detail-card h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+
+    .pipeline-detail-card p {
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .pipeline-detail-card .detail-meta {
+      display: flex;
+      gap: 16px;
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--text-tertiary);
+      font-family: var(--mono);
+    }
+
+    /* ——— Agent Cards ——— */
+    .agent-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 800px) {
+      .agent-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 520px) {
+      .agent-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .pipeline-track {
+        overflow-x: auto;
+        justify-content: flex-start;
+        gap: 8px;
+        padding-bottom: 16px;
+      }
+
+      .pipeline-node {
+        width: 80px;
+      }
+
+      .pipeline-line {
+        display: none;
+      }
+
+      .stats-row {
+        gap: 28px;
+      }
+
+      .stat-item .val {
+        font-size: 32px;
+      }
+    }
+
+    .agent-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: var(--shadow-s);
+      border: 1px solid var(--border);
+      transition: box-shadow 0.3s var(--ease), transform 0.3s var(--ease), border-color 0.3s var(--ease);
+    }
+
+    .agent-card:hover {
+      box-shadow: var(--shadow-m);
+      transform: translateY(-2px);
+    }
+
+    .agent-card.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), var(--shadow-m);
+    }
+
+    .agent-card-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--bg-alt);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+      transition: background 0.3s var(--ease);
+    }
+
+    .agent-card.active .agent-card-icon {
+      background: var(--accent-soft);
+    }
+
+    .agent-card-icon svg {
+      width: 18px;
+      height: 18px;
+      stroke: var(--text-secondary);
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transition: stroke 0.3s var(--ease);
+    }
+
+    .agent-card.active .agent-card-icon svg {
+      stroke: var(--accent);
+    }
+
+    .agent-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin-bottom: 4px;
+    }
+
+    .agent-card p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .agent-card-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 14px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-tertiary);
+      transition: color 0.3s var(--ease);
+    }
+
+    .agent-card-status .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-tertiary);
+      transition: background 0.3s var(--ease);
+    }
+
+    .agent-card.active .agent-card-status {
+      color: var(--accent);
+    }
+
+    .agent-card.active .agent-card-status .status-dot {
+      background: var(--accent);
+      animation: dot-breathe 1.4s ease-in-out infinite;
+    }
+
+    .agent-card.done .agent-card-status {
+      color: var(--green);
+    }
+
+    .agent-card.done .agent-card-status .status-dot {
+      background: var(--green);
+      animation: none;
+    }
+
+    @keyframes dot-breathe {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.3;
+      }
+    }
+
+    .agent-card-log {
+      margin-top: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-tertiary);
+      line-height: 1.6;
+      height: 36px;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.3s var(--ease);
+    }
+
+    .agent-card.active .agent-card-log,
+    .agent-card.done .agent-card-log {
+      opacity: 1;
+    }
+
+    .agent-card-log div {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ——— Console ——— */
+    .console-wrap {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .console-phase-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .console-phase-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      min-width: 120px;
+    }
+
+    .console-progress {
+      flex: 1;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .console-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.6s var(--ease);
+    }
+
+    .console-pct {
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--text-tertiary);
+      min-width: 36px;
+      text-align: right;
+    }
+
+    .terminal {
+      background: #1a1a1a;
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.7;
+      color: #e0e0e0;
+      height: 360px;
+      overflow-y: auto;
+      box-shadow: var(--shadow-l);
+    }
+
+    .terminal::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .terminal::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .terminal::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 3px;
+    }
+
+    .terminal .t-time {
+      color: #666;
+      margin-right: 10px;
+    }
+
+    .terminal .t-agent {
+      color: var(--accent);
+      font-weight: 500;
+      margin-right: 8px;
+    }
+
+    .terminal .t-dim {
+      color: #888;
+    }
+
+    .terminal .t-ok {
+      color: var(--green);
+    }
+
+    .terminal .t-err {
+      color: var(--red);
+    }
+
+    .terminal .t-warn {
+      color: var(--orange);
+    }
+
+    /* ——— Endpoints ——— */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    @media (max-width: 860px) {
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-s);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .panel-header .sub {
+      font-weight: 400;
+      color: var(--text-tertiary);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead th {
+      text-align: left;
+      font-weight: 500;
+      color: var(--text-secondary);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody td {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-primary);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    td.mono {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 980px;
+    }
+
+    .badge .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .badge-ok {
+      background: var(--green-soft);
+      color: #1a9a3e;
+    }
+
+    .badge-blue {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .badge-blue .dot {
+      animation: dot-breathe 1.2s ease-in-out infinite;
+    }
+
+    .badge-red {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .api-log {
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.9;
+      padding: 14px 20px;
+      height: 300px;
+      overflow-y: auto;
+      color: var(--text-secondary);
+    }
+
+    .api-log .m {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .api-log .s2 {
+      color: #1a9a3e;
+    }
+
+    .api-log .s4 {
+      color: var(--red);
+    }
+
+    .api-log div {
+      white-space: nowrap;
+    }
+
+    /* ——— Findings ——— */
+    .findings-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .finding {
+      background: var(--surface);
+      border-radius: var(--radius-s);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px;
+      align-items: center;
+      box-shadow: var(--shadow-s);
+      border: 1px solid var(--border);
+      opacity: 0;
+      transform: translateY(6px);
+      animation: reveal-up 0.4s var(--ease) forwards;
+    }
+
+    .sev-chip {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .sev-critical {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .sev-high {
+      background: var(--orange-soft);
+      color: #c77d08;
+    }
+
+    .sev-medium {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .sev-low {
+      background: var(--green-soft);
+      color: #1a9a3e;
+    }
+
+    .finding-main h4 {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .finding-main .meta {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-top: 2px;
+      font-family: var(--mono);
+    }
+
+    @media (max-width: 600px) {
+      .finding {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+    }
+
+    .findings-empty {
+      text-align: center;
+      padding: 40px 0;
+      font-size: 14px;
+      color: var(--text-tertiary);
+    }
+
+    /* ——— Markdown Body ——— */
+    .markdown-body {
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--text-primary);
+    }
+    
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+      font-weight: 600;
+      margin-top: 24px;
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+    
+    .markdown-body h1 { font-size: 24px; }
+    .markdown-body h2 { font-size: 20px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .markdown-body h3 { font-size: 16px; }
+    
+    .markdown-body p, .markdown-body ul, .markdown-body ol {
+      margin-bottom: 16px;
+    }
+    
+    .markdown-body ul {
+      padding-left: 24px;
+    }
+    
+    .markdown-body li {
+      margin-bottom: 6px;
+    }
+    
+    .markdown-body code {
+      font-family: var(--mono);
+      font-size: 13px;
+      background: var(--bg-alt);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    
+    .markdown-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+    }
+    
+    .markdown-body th, .markdown-body td {
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      text-align: left;
+    }
+    
+    .markdown-body th {
+      background: var(--bg-alt);
+      font-weight: 600;
+    }
+    
+    .markdown-body hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 32px 0;
+    }
+
+    /* ——— Target Bar ——— */
+    .target-bar {
+      background: var(--bg-alt);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 0;
+    }
+
+    .target-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .mode-switch {
+      display: inline-flex;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      padding: 3px;
+    }
+
+    .mode-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 14px;
+      border-radius: 6px;
+      transition: all 0.15s var(--ease);
+    }
+
+    .mode-btn.active {
+      background: var(--text-primary);
+      color: #fff;
+    }
+
+    .mode-btn:hover:not(.active) {
+      color: var(--text-primary);
+    }
+
+    .target-form {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1 1 320px;
+      min-width: 240px;
+    }
+
+    .target-form[hidden] {
+      display: none;
+    }
+
+    .target-form input {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-family: var(--mono);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-s);
+      background: var(--surface);
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color 0.2s var(--ease);
+    }
+
+    .target-form input:focus {
+      border-color: var(--accent);
+    }
+
+    .target-info {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .target-info strong {
+      font-family: var(--mono);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .target-info .pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 980px;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    /* ——— Code Block ——— */
+    .code-panel {
+      max-width: 700px;
+      margin: 0 auto;
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-m);
+      overflow: hidden;
+    }
+
+    .code-panel-header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .code-panel-header span:last-child {
+      font-weight: 400;
+      color: var(--text-tertiary);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .code-block {
+      padding: 20px 24px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: var(--text-primary);
+      background: var(--bg-alt);
+      overflow-x: auto;
+    }
+
+    .code-block code {
+      white-space: pre;
+    }
+
+    /* ——— Footer ——— */
+    .footer {
+      padding: 40px 0 60px;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer .wrap {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .footer p {
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    .footer a {
+      font-size: 13px;
+      color: var(--text-secondary);
+      text-underline-offset: 3px;
+    }
+
+    /* ——— Animations ——— */
+    @keyframes reveal-up {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.7s var(--ease), transform 0.7s var(--ease);
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    .reveal-d1 {
+      transition-delay: 0.06s;
+    }
+
+    .reveal-d2 {
+      transition-delay: 0.12s;
+    }
+
+    .reveal-d3 {
+      transition-delay: 0.18s;
+    }
+
+    .reveal-d4 {
+      transition-delay: 0.24s;
+    }
+
+    .reveal-d5 {
+      transition-delay: 0.30s;
+    }
+
+    /* Hero entrance */
+    .hero-reveal {
+      opacity: 0;
+      transform: translateY(16px);
+      animation: hero-enter 0.8s var(--ease) forwards;
+    }
+
+    .hero-reveal-d1 {
+      animation-delay: 0.1s;
+    }
+
+    .hero-reveal-d2 {
+      animation-delay: 0.2s;
+    }
+
+    .hero-reveal-d3 {
+      animation-delay: 0.3s;
+    }
+
+    .hero-reveal-d4 {
+      animation-delay: 0.5s;
+    }
+
+    @keyframes hero-enter {
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+
+      .reveal {
+        opacity: 1;
+        transform: none;
+      }
+
+      .hero-reveal {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
 </head>
+
 <body>
 
-  <div class="topbar">
+  <!-- Nav -->
+  <nav class="nav">
     <div class="wrap">
-      <div class="brand">
-        <span>Multi&#8209;Agent Vulnerability &amp; Endpoint Security System</span>
-      </div>
-      <nav>
-        <a href="#workflow">Agent workflow</a>
+      <span class="nav-brand">CyberSecurity Agent</span>
+      <div class="nav-links">
+        <a href="#pipeline">Pipeline</a>
+        <a href="#agents">Agents</a>
         <a href="#endpoints">Endpoints</a>
         <a href="#findings">Findings</a>
-      </nav>
+      </div>
     </div>
-  </div>
+  </nav>
 
+  <!-- Hero -->
   <header class="hero">
     <div class="wrap">
-      <div>
-        <div class="hero-eyebrow">Autonomous endpoint defense</div>
-        <h1>Six agents. One endpoint fleet. Watched in real time.</h1>
-        <p class="lede">
-          This demo runs a coordinating orchestrator and six specialist agents against a simulated
-          endpoint fleet &mdash; discovering assets, scanning for vulnerabilities, scoring risk, and
-          drafting fixes concurrently, with every API call logged as it happens.
-        </p>
-        <div class="hero-actions">
-          <button class="btn btn-primary" id="toggleBtn" type="button">
-            <span class="dot" aria-hidden="true"></span>
-            <span id="toggleBtnLabel">Run Live Assessment</span>
-          </button>
-          <a class="btn btn-secondary" href="#findings">Jump to findings</a>
-          <a class="btn btn-quiet" href="https://github.com/nanditapatramumu/Cybersecurity-Agent" target="_blank" rel="noopener">View source on GitHub</a>
-        </div>
+      <div class="hero-eyebrow hero-reveal hero-reveal-d1">Autonomous API Security</div>
+      <h1 class="hero-reveal hero-reveal-d2">Six agents.<br>One assessment.</h1>
+      <p class="lede hero-reveal hero-reveal-d3">
+        A coordinated pipeline of specialist agents discovers, models,
+        tests, and reports API vulnerabilities — while you watch.
+      </p>
+      <div class="hero-actions hero-reveal hero-reveal-d4">
+        <button class="btn btn-primary" id="toggleBtn" type="button">
+          <span id="toggleBtnLabel">Run Assessment</span>
+        </button>
+        <a class="btn btn-secondary" href="#pipeline">How it works</a>
       </div>
-
-      <div class="hero-widget">
-        <div class="hero-widget-top">
-          <span>Fleet status</span>
-          <span class="live-pill" id="livePill"><span class="pulse-dot" aria-hidden="true"></span><span id="livePillLabel">Live</span></span>
+      <div class="stats-row hero-reveal hero-reveal-d4">
+        <div class="stat-item">
+          <div class="val" id="statAgents">6</div>
+          <div class="label">Agents</div>
         </div>
-        <div class="stat-grid">
-          <div class="stat"><div class="n" id="statEndpoints">0</div><div class="l">Endpoints monitored</div></div>
-          <div class="stat"><div class="n" id="statAgents">6</div><div class="l">Agents active</div></div>
-          <div class="stat"><div class="n" id="statFindings">0</div><div class="l">Open findings</div></div>
-          <div class="stat"><div class="n" id="statChecks">0</div><div class="l">Checks run</div></div>
+        <div class="stat-item">
+          <div class="val" id="statChecks">0</div>
+          <div class="label">Checks run</div>
+        </div>
+        <div class="stat-item">
+          <div class="val" id="statFindings">0</div>
+          <div class="label">Findings</div>
         </div>
       </div>
     </div>
   </header>
 
+  <!-- Target bar -->
   <div class="target-bar">
     <div class="wrap">
       <div class="target-row">
-        <div class="mode-switch" role="tablist" aria-label="Choose what the agents run against">
-          <button class="mode-btn active" id="modeDemoBtn" type="button" role="tab" aria-selected="true">Use demo fleet</button>
-          <button class="mode-btn" id="modeCustomBtn" type="button" role="tab" aria-selected="false">Enter a website</button>
+        <div class="mode-switch" role="tablist">
+          <button class="mode-btn active" id="modeDemoBtn" type="button" role="tab" aria-selected="true">Demo
+            fleet</button>
+          <button class="mode-btn" id="modeCustomBtn" type="button" role="tab" aria-selected="false">Custom URL</button>
         </div>
         <form class="target-form" id="targetForm" hidden>
-          <div class="url-field">
-            <input type="text" id="targetInput" inputmode="url" autocomplete="off" spellcheck="false"
-                   placeholder="http://127.0.0.1:8000" aria-label="Website base URL">
-          </div>
-          <button class="btn btn-primary" type="submit" id="runTargetBtn">
-            <span class="dot" aria-hidden="true"></span> Run
-          </button>
+          <input type="text" id="targetInput" inputmode="url" autocomplete="off" spellcheck="false"
+            placeholder="http://127.0.0.1:8000" aria-label="Target URL">
+          <button class="btn btn-primary" type="submit" style="padding: 10px 18px; font-size: 14px;">Run</button>
         </form>
       </div>
-      <p class="target-help" id="targetHelp">Type a base URL and press Run (or Enter) to relabel the workflow around it.</p>
-      <div class="target-active">
-        <span>Currently running against:</span>
+      <div class="target-info">
+        <span>Target:</span>
         <strong id="targetActiveLabel">http://127.0.0.1:8000</strong>
-        <span class="sim-note" id="simNote" style="background:var(--risk-soft);color:var(--risk);">Live Assessment Mode</span>
+        <span class="pill" id="simNote">Live</span>
       </div>
     </div>
   </div>
 
-  <section id="workflow">
+  <!-- Pipeline Section -->
+  <section class="section section-alt" id="pipeline">
     <div class="wrap">
-      <div class="section-head">
-        <div>
-          <h2>Agent workflow</h2>
-          <p>Every agent runs on its own clock, reporting back to the orchestrator as work finishes &mdash; not a queue, a mesh.</p>
+      <div class="section-header reveal">
+        <h2>How the pipeline runs</h2>
+        <p>Each phase completes before the next begins. The orchestrator routes work, every agent reports back.</p>
+      </div>
+
+      <div class="pipeline-track reveal reveal-d1" id="pipelineTrack">
+        <div class="pipeline-line">
+          <div class="pipeline-line-fill" id="pipeLineFill"></div>
         </div>
-      </div>
 
-      <div class="flow-svg-wrap">
-        <svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram of an orchestrator at the center routing work out to six specialist agents arranged around it, with animated pulses showing live, two-way data flow to each agent and back.">
-          <g stroke="#c1c6cd" stroke-width="1.5" fill="none">
-            <path id="p0" d="M380,230 L380,60"></path>
-            <path id="p1" d="M380,230 L527,145"></path>
-            <path id="p2" d="M380,230 L527,315"></path>
-            <path id="p3" d="M380,230 L380,400"></path>
-            <path id="p4" d="M380,230 L233,315"></path>
-            <path id="p5" d="M380,230 L233,145"></path>
-          </g>
-
-          <g id="pulses" fill="#3a6ea5"></g>
-
-          <circle cx="380" cy="230" r="34" fill="#20242a"></circle>
-          <text x="380" y="226" text-anchor="middle" fill="#ffffff" font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="600">HUB</text>
-          <text x="380" y="240" text-anchor="middle" fill="#c1c6cd" font-family="IBM Plex Sans, sans-serif" font-size="9">routes work</text>
-
-          <g id="agent-nodes" font-family="IBM Plex Sans, sans-serif" font-size="13" fill="#20242a" text-anchor="middle" font-weight="500">
-            <g transform="translate(380,60)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="-32">Recon</text></g>
-            <g transform="translate(527,145)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="-32">Scanner</text></g>
-            <g transform="translate(527,315)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="44">Threat intel</text></g>
-            <g transform="translate(380,400)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="44">Risk scoring</text></g>
-            <g transform="translate(233,315)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="44">Remediation</text></g>
-            <g transform="translate(233,145)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="-32">Reporting</text></g>
-          </g>
-        </svg>
-        <p class="flow-caption">The orchestrator (center) hands work out to whichever agent should run next; each agent reports its result straight back before the next hop &mdash; the moving dots trace that round trip on all six spokes at once, which is what makes the agents feel concurrent rather than a queue.</p>
-      </div>
-
-      <div class="agent-grid" id="agentGrid"></div>
-
-      <div class="langgraph-panel">
-        <div class="panel-head">
-          <span>How this maps to LangGraph</span>
-          <span class="sub">supervisor pattern</span>
-        </div>
-        <p class="langgraph-intro">The hub-and-spoke shape above is the common LangGraph <em>supervisor</em> pattern: one node decides which specialist runs next, and every specialist routes back to that same node instead of to each other.</p>
-        <pre class="code-block"><code>from langgraph.graph import StateGraph, END
-
-graph = StateGraph(AgentState)
-
-graph.add_node("orchestrator", orchestrator_node)
-graph.add_node("recon", recon_node)
-graph.add_node("scanner", scanner_node)
-graph.add_node("threat_intel", threat_intel_node)
-graph.add_node("risk_scoring", risk_scoring_node)
-graph.add_node("remediation", remediation_node)
-graph.add_node("reporting", reporting_node)
-
-graph.set_entry_point("orchestrator")
-
-# the orchestrator decides which specialist should act next
-graph.add_conditional_edges(
-    "orchestrator",
-    route_to_next_agent,
-    {
-        "recon": "recon",
-        "scanner": "scanner",
-        "threat_intel": "threat_intel",
-        "risk_scoring": "risk_scoring",
-        "remediation": "remediation",
-        "reporting": "reporting",
-        "done": END,
-    },
-)
-
-# every specialist reports back to the orchestrator, never to each other
-for agent in ["recon", "scanner", "threat_intel", "risk_scoring", "remediation", "reporting"]:
-    graph.add_edge(agent, "orchestrator")
-
-app = graph.compile()</code></pre>
-      </div>
-
-      <div id="liveConsole" style="display: none; margin-top: 40px; padding-top: 40px; border-top: 1px solid var(--line);">
-        <div class="section-head">
-          <div>
-            <h2>Live Execution Console</h2>
-            <p>Real-time telemetry and analysis from the PANDA agents.</p>
+        <div class="pipeline-node" data-phase="recon" id="pnode-recon">
+          <div class="pipeline-dot">
+            <svg viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.35-4.35" />
+            </svg>
           </div>
+          <div class="pipeline-node-label">Recon</div>
         </div>
 
-        <div class="phase-timeline">
-          <div class="phase-track"><div class="phase-progress" id="phaseProgress"></div></div>
-          <div class="phase-step" id="phase-recon"><div class="phase-icon">1</div><div class="phase-label">Recon</div></div>
-          <div class="phase-step" id="phase-understanding"><div class="phase-icon">2</div><div class="phase-label">Understanding</div></div>
-          <div class="phase-step" id="phase-threat_modeling"><div class="phase-icon">3</div><div class="phase-label">Threat Modeling</div></div>
-          <div class="phase-step" id="phase-test_planning"><div class="phase-icon">4</div><div class="phase-label">Planning</div></div>
-          <div class="phase-step" id="phase-execution"><div class="phase-icon">5</div><div class="phase-label">Execution</div></div>
-          <div class="phase-step" id="phase-reporting"><div class="phase-icon">6</div><div class="phase-label">Reporting</div></div>
+        <div class="pipeline-node" data-phase="understanding" id="pnode-understanding">
+          <div class="pipeline-dot">
+            <svg viewBox="0 0 24 24">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+            </svg>
+          </div>
+          <div class="pipeline-node-label">Understanding</div>
         </div>
 
-        <div class="terminal-wrap" id="terminalLog">
-          <div class="t-detail">PANDA agent standing by. Ready to execute assessment.</div>
+        <div class="pipeline-node" data-phase="threat_modeling" id="pnode-threat_modeling">
+          <div class="pipeline-dot">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </div>
+          <div class="pipeline-node-label">Threat Model</div>
+        </div>
+
+        <div class="pipeline-node" data-phase="test_planning" id="pnode-test_planning">
+          <div class="pipeline-dot">
+            <svg viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+          </div>
+          <div class="pipeline-node-label">Test Planning</div>
+        </div>
+
+        <div class="pipeline-node" data-phase="execution" id="pnode-execution">
+          <div class="pipeline-dot">
+            <svg viewBox="0 0 24 24">
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+          </div>
+          <div class="pipeline-node-label">Execution</div>
+        </div>
+
+        <div class="pipeline-node" data-phase="reporting" id="pnode-reporting">
+          <div class="pipeline-dot">
+            <svg viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <line x1="10" y1="9" x2="8" y2="9" />
+            </svg>
+          </div>
+          <div class="pipeline-node-label">Reporting</div>
         </div>
       </div>
 
+      <div class="pipeline-detail" id="pipelineDetail">
+        <div class="pipeline-detail-card" id="detail-recon">
+          <h3>Reconnaissance</h3>
+          <p>Crawls the target, discovers API endpoints, maps authentication schemes, and builds a surface-area
+            inventory for downstream agents.</p>
+          <div class="detail-meta"><span>recon agent</span><span>~15% of pipeline</span></div>
+        </div>
+        <div class="pipeline-detail-card" id="detail-understanding">
+          <h3>API Understanding</h3>
+          <p>LLM-driven analysis of discovered endpoints — infers resource relationships, data flows, and business logic
+            from raw HTTP responses.</p>
+          <div class="detail-meta"><span>understanding agent</span><span>LLM-powered</span></div>
+        </div>
+        <div class="pipeline-detail-card" id="detail-threat_modeling">
+          <h3>Threat Modeling</h3>
+          <p>Generates security hypotheses based on the API surface and understanding. Maps potential vulnerabilities to
+            OWASP categories.</p>
+          <div class="detail-meta"><span>threat_modeling agent</span><span>LLM-powered</span></div>
+        </div>
+        <div class="pipeline-detail-card" id="detail-test_planning">
+          <h3>Test Planning</h3>
+          <p>Creates targeted test cases for each hypothesis — choosing HTTP methods, payloads, and expected responses
+            to confirm or reject threats.</p>
+          <div class="detail-meta"><span>test_planning agent</span><span>iterative</span></div>
+        </div>
+        <div class="pipeline-detail-card" id="detail-execution">
+          <h3>Execution &amp; Analysis</h3>
+          <p>Runs planned tests against the live API, captures responses, and uses the LLM to determine whether each
+            vulnerability hypothesis is confirmed.</p>
+          <div class="detail-meta"><span>executor agent</span><span>live HTTP calls</span></div>
+        </div>
+        <div class="pipeline-detail-card" id="detail-reporting">
+          <h3>Report Generation</h3>
+          <p>Compiles all confirmed findings into a structured security report with severity ratings, OWASP mappings,
+            and remediation guidance.</p>
+          <div class="detail-meta"><span>reporting agent</span><span>markdown output</span></div>
+        </div>
+      </div>
     </div>
   </section>
 
-  <section id="endpoints">
+  <!-- Agents Section -->
+  <section class="section" id="agents">
     <div class="wrap">
-      <div class="section-head">
-        <div>
-          <h2>Live endpoints &amp; API activity</h2>
-          <p>The fleet the agents above are currently working against, and the raw calls driving it.</p>
-        </div>
+      <div class="section-header reveal">
+        <h2>The agents</h2>
+        <p>Six specialists, each with a distinct role. The orchestrator decides who works next.</p>
       </div>
 
-      <div class="two-col">
-        <div class="panel">
-          <div class="panel-head">
-            <span>Monitored endpoints</span>
-            <span class="sub" id="endpointsSub">GET /api/v1/endpoints</span>
+      <div class="agent-grid" id="agentGrid">
+        <div class="agent-card reveal" data-agent="recon" id="acard-recon">
+          <div class="agent-card-icon">
+            <svg viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.35-4.35" />
+            </svg>
           </div>
-          <table>
-            <thead>
-              <tr><th>Endpoint</th><th>IP address</th><th class="mono">OS</th><th>Status</th><th class="mono">Last scan</th></tr>
-            </thead>
-            <tbody id="endpointsBody"></tbody>
-          </table>
+          <h3>Recon</h3>
+          <p>Discovers endpoints, maps the API surface, identifies auth schemes.</p>
+          <div class="agent-card-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
+          <div class="agent-card-log"></div>
         </div>
 
-        <div class="panel">
-          <div class="panel-head">
+        <div class="agent-card reveal reveal-d1" data-agent="understanding" id="acard-understanding">
+          <div class="agent-card-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+            </svg>
+          </div>
+          <h3>Understanding</h3>
+          <p>Interprets API structure, infers business logic and data flows.</p>
+          <div class="agent-card-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
+          <div class="agent-card-log"></div>
+        </div>
+
+        <div class="agent-card reveal reveal-d2" data-agent="threat_modeling" id="acard-threat_modeling">
+          <div class="agent-card-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </div>
+          <h3>Threat Modeling</h3>
+          <p>Generates hypotheses, maps threats to OWASP categories.</p>
+          <div class="agent-card-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
+          <div class="agent-card-log"></div>
+        </div>
+
+        <div class="agent-card reveal reveal-d3" data-agent="test_planning" id="acard-test_planning">
+          <div class="agent-card-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+          </div>
+          <h3>Test Planning</h3>
+          <p>Designs targeted probes and payloads for each hypothesis.</p>
+          <div class="agent-card-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
+          <div class="agent-card-log"></div>
+        </div>
+
+        <div class="agent-card reveal reveal-d4" data-agent="execution" id="acard-execution">
+          <div class="agent-card-icon">
+            <svg viewBox="0 0 24 24">
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+          </div>
+          <h3>Execution</h3>
+          <p>Sends live HTTP requests and captures responses for analysis.</p>
+          <div class="agent-card-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
+          <div class="agent-card-log"></div>
+        </div>
+
+        <div class="agent-card reveal reveal-d5" data-agent="reporting" id="acard-reporting">
+          <div class="agent-card-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <line x1="10" y1="9" x2="8" y2="9" />
+            </svg>
+          </div>
+          <h3>Reporting</h3>
+          <p>Compiles findings into a structured Markdown security report.</p>
+          <div class="agent-card-status"><span class="status-dot"></span><span class="status-text">Idle</span></div>
+          <div class="agent-card-log"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Console Section -->
+  <section class="section section-alt" id="console" style="display:none;">
+    <div class="wrap">
+      <div class="section-header">
+        <h2>Live Console</h2>
+        <p>Real-time telemetry from the running pipeline.</p>
+      </div>
+      <div class="console-wrap">
+        <div class="console-phase-bar">
+          <div class="console-phase-label" id="consolePhaseLabel">Ready</div>
+          <div class="console-progress">
+            <div class="console-progress-fill" id="consoleProgressFill"></div>
+          </div>
+          <div class="console-pct" id="consolePct">0%</div>
+        </div>
+        <div class="terminal" id="terminalLog">
+          <div class="t-dim">Cybersec agent standing by.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- API activity -->
+  <section class="section" id="endpoints">
+    <div class="wrap">
+      <div class="section-header reveal">
+        <h2>API activity</h2>
+        <p>Every HTTP call made by the agents.</p>
+      </div>
+
+      <div>
+        <div class="panel reveal">
+          <div class="panel-header">
             <span>API activity</span>
             <span class="sub" id="apiSub">live</span>
           </div>
           <div class="api-log" id="apiLog"></div>
         </div>
       </div>
-
-      <div id="liveConsole" style="display: none; margin-top: 40px; padding-top: 40px; border-top: 1px solid var(--line);">
-        <div class="section-head">
-          <div>
-            <h2>Live Execution Console</h2>
-            <p>Real-time telemetry and analysis from the PANDA agents.</p>
-          </div>
-        </div>
-
-        <div class="phase-timeline">
-          <div class="phase-track"><div class="phase-progress" id="phaseProgress"></div></div>
-          <div class="phase-step" id="phase-recon"><div class="phase-icon">1</div><div class="phase-label">Recon</div></div>
-          <div class="phase-step" id="phase-understanding"><div class="phase-icon">2</div><div class="phase-label">Understanding</div></div>
-          <div class="phase-step" id="phase-threat_modeling"><div class="phase-icon">3</div><div class="phase-label">Threat Modeling</div></div>
-          <div class="phase-step" id="phase-test_planning"><div class="phase-icon">4</div><div class="phase-label">Planning</div></div>
-          <div class="phase-step" id="phase-execution"><div class="phase-icon">5</div><div class="phase-label">Execution</div></div>
-          <div class="phase-step" id="phase-reporting"><div class="phase-icon">6</div><div class="phase-label">Reporting</div></div>
-        </div>
-
-        <div class="terminal-wrap" id="terminalLog">
-          <div class="t-detail">PANDA agent standing by. Ready to execute assessment.</div>
-        </div>
-      </div>
-
     </div>
   </section>
 
-  <section id="findings">
+  <!-- Findings -->
+  <section class="section section-alt" id="findings">
     <div class="wrap">
-      <div class="section-head">
+      <div class="section-header reveal">
         <div>
-          <h2>Findings feed</h2>
-          <p>Newest first. Each entry names the agent that surfaced it and the endpoint it affects.</p>
+          <h2>Findings</h2>
+          <p>Newest first. Each entry names the agent that surfaced it.</p>
         </div>
-        <button class="btn btn-secondary" id="exportBtn" type="button">Export report</button>
       </div>
-
       <div class="findings-list" id="findingsList"></div>
-      <div class="findings-foot">
-        <span style="font-size:12.5px;color:var(--ink-soft);" id="findingsEmpty">Findings will appear here as agents complete their first pass.</span>
+      <div class="findings-empty" id="findingsEmpty">Findings will appear here once the agents complete their work.
       </div>
-
-      <div id="liveConsole" style="display: none; margin-top: 40px; padding-top: 40px; border-top: 1px solid var(--line);">
-        <div class="section-head">
-          <div>
-            <h2>Live Execution Console</h2>
-            <p>Real-time telemetry and analysis from the PANDA agents.</p>
-          </div>
-        </div>
-
-        <div class="phase-timeline">
-          <div class="phase-track"><div class="phase-progress" id="phaseProgress"></div></div>
-          <div class="phase-step" id="phase-recon"><div class="phase-icon">1</div><div class="phase-label">Recon</div></div>
-          <div class="phase-step" id="phase-understanding"><div class="phase-icon">2</div><div class="phase-label">Understanding</div></div>
-          <div class="phase-step" id="phase-threat_modeling"><div class="phase-icon">3</div><div class="phase-label">Threat Modeling</div></div>
-          <div class="phase-step" id="phase-test_planning"><div class="phase-icon">4</div><div class="phase-label">Planning</div></div>
-          <div class="phase-step" id="phase-execution"><div class="phase-icon">5</div><div class="phase-label">Execution</div></div>
-          <div class="phase-step" id="phase-reporting"><div class="phase-icon">6</div><div class="phase-label">Reporting</div></div>
-        </div>
-
-        <div class="terminal-wrap" id="terminalLog">
-          <div class="t-detail">PANDA agent standing by. Ready to execute assessment.</div>
-        </div>
-      </div>
-
     </div>
   </section>
 
-  <footer>
+  <!-- Final Report -->
+  <section class="section" id="reportSection" style="display: none;">
     <div class="wrap">
-      <p>Frontend demo for the Multi&#8209;Agent Vulnerability &amp; Endpoint Security System. All activity on this page is simulated locally.</p>
-      <a href="https://github.com/nanditapatramumu/Cybersecurity-Agent" target="_blank" rel="noopener">Project repository</a>
+      <div class="section-header reveal">
+        <div>
+          <h2>Final Assessment Report</h2>
+          <p>Generated by the Reporting agent</p>
+        </div>
+      </div>
+      <div class="panel reveal" style="padding: 40px;">
+        <div id="markdownReport" class="markdown-body"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="wrap">
+      <p>CyberSec — Multi-Agent Vulnerability &amp; Endpoint Security System</p>
+      <a href="https://github.com/nanditapatramumu/Cybersecurity-Agent" target="_blank" rel="noopener">View on
+        GitHub</a>
     </div>
   </footer>
 
-<script>
-(function(){
-  "use strict";
+  <script>
+    (function () {
+      "use strict";
 
-  var targetUrl = "http://127.0.0.1:8000";
-  var allowWrite = false;
-  var ws = null;
-  var isRunning = false;
-  
-  var toggleBtn = document.getElementById('toggleBtn');
-  var toggleBtnLabel = document.getElementById('toggleBtnLabel');
-  var livePill = document.getElementById('livePill');
-  var livePillLabel = document.getElementById('livePillLabel');
-  var terminalLog = document.getElementById('terminalLog');
-  var liveConsole = document.getElementById('liveConsole');
-  var phaseProgress = document.getElementById('phaseProgress');
-  
-  var findingsList = document.getElementById('findingsList');
-  var findingsEmpty = document.getElementById('findingsEmpty');
-  var statFindings = document.getElementById('statFindings');
-  var statChecks = document.getElementById('statChecks');
-  var statEndpoints = document.getElementById('statEndpoints');
-  var apiLog = document.getElementById('apiLog');
-  
-  var checksCount = 0;
+      // ——— State ———
+      var targetUrl = "http://127.0.0.1:8000";
+      var ws = null;
+      var isRunning = false;
+      var checksCount = 0;
+      var simTimer = null;
 
-  var targetInput = document.getElementById('targetInput');
-  var targetForm = document.getElementById('targetForm');
-  var targetActiveLabel = document.getElementById('targetActiveLabel');
-
-  targetForm.addEventListener('submit', function(e) {
-    e.preventDefault();
-    if(targetInput.value) {
-       targetUrl = targetInput.value;
-       if (!/^https?:\/\//i.test(targetUrl)) targetUrl = 'http://' + targetUrl;
-       targetActiveLabel.textContent = targetUrl;
-    }
-  });
-
-  function appendTerminal(agent, event, detail, isError) {
-    var line = document.createElement('div');
-    var d = new Date();
-    var time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
-    
-    var html = '<span class="t-time">' + time + '</span>';
-    html += '<span class="t-agent">[' + agent + ']</span>';
-    if(event) html += '<span class="t-event">' + event + '</span>';
-    
-    var detailClass = isError ? 't-error' : 't-detail';
-    html += '<span class="' + detailClass + '">' + detail + '</span>';
-    
-    line.innerHTML = html;
-    terminalLog.appendChild(line);
-    terminalLog.scrollTop = terminalLog.scrollHeight;
-  }
-
-  function setPhase(phaseId, progress) {
-    var phases = ['recon', 'understanding', 'threat_modeling', 'test_planning', 'execution', 'reporting'];
-    var activeIdx = phases.indexOf(phaseId);
-    if(activeIdx === -1) return;
-    
-    phases.forEach(function(p, i) {
-       var el = document.getElementById('phase-' + p);
-       if(!el) return;
-       if(i < activeIdx) {
-           el.classList.add('completed');
-           el.classList.remove('active');
-       } else if(i === activeIdx) {
-           el.classList.add('active');
-           el.classList.remove('completed');
-       } else {
-           el.classList.remove('active');
-           el.classList.remove('completed');
-       }
-    });
-    
-    if(progress !== undefined && progress !== null) {
-       phaseProgress.style.width = progress + '%';
-    }
-  }
-
-  function renderFindings(findings) {
-      if(!findings || !findings.length) return;
-      findingsEmpty.style.display = 'none';
-      statFindings.textContent = findings.length;
+      // ——— DOM refs ———
+      var toggleBtn = document.getElementById('toggleBtn');
+      var toggleBtnLabel = document.getElementById('toggleBtnLabel');
+      var terminalLog = document.getElementById('terminalLog');
+      var consoleSection = document.getElementById('console');
+      var consolePhaseLabel = document.getElementById('consolePhaseLabel');
+      var consoleProgressFill = document.getElementById('consoleProgressFill');
+      var consolePct = document.getElementById('consolePct');
+      var pipeLineFill = document.getElementById('pipeLineFill');
+      var findingsList = document.getElementById('findingsList');
+      var findingsEmpty = document.getElementById('findingsEmpty');
+      var statFindings = document.getElementById('statFindings');
+      var statChecks = document.getElementById('statChecks');
+      var apiLog = document.getElementById('apiLog');
+      var targetInput = document.getElementById('targetInput');
+      var targetForm = document.getElementById('targetForm');
+      var targetActiveLabel = document.getElementById('targetActiveLabel');
       
-      var SEV_LABEL = { 'CRITICAL': 'Critical', 'HIGH': 'High', 'MEDIUM': 'Medium', 'LOW': 'Low', 'INFO': 'Info' };
-      findingsList.innerHTML = '';
-      
-      findings.forEach(function(f) {
-        var el = document.createElement('div');
-        var sevClass = f.severity.toLowerCase();
-        el.className = 'finding sev-' + sevClass;
-        el.innerHTML =
-          '<span class="sev-chip sev-' + sevClass + '">' + (SEV_LABEL[f.severity] || f.severity) + '</span>' +
-          '<div class="finding-main"><div class="title">' + f.title + '</div>' +
-            '<div class="meta">' + f.owasp_category + ' &middot; ' + f.id + '</div></div>';
-        findingsList.appendChild(el);
+      var reportSection = document.getElementById('reportSection');
+      var markdownReport = document.getElementById('markdownReport');
+
+      // ——— Scroll Reveal ———
+      var revealObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+      document.querySelectorAll('.reveal').forEach(function (el) {
+        revealObserver.observe(el);
       });
-  }
 
-  function logApiCall(method, path, status, ms) {
-    checksCount++;
-    statChecks.textContent = checksCount;
-    var statusClass = status >= 400 ? 's4' : (status >= 200 && status < 300 ? 's2' : '');
-    var line = document.createElement('div');
-    var d = new Date();
-    var time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
-    line.innerHTML = time + '&nbsp;&nbsp;<span class="m">' + String(method).padEnd(5) + '</span>' + path + '&nbsp;&nbsp;<span class="' + statusClass + '">' + status + '</span>&nbsp;&nbsp;' + Math.round(ms) + 'ms';
-    apiLog.appendChild(line);
-    while(apiLog.children.length > 50){ apiLog.removeChild(apiLog.firstChild); }
-    apiLog.scrollTop = apiLog.scrollHeight;
-  }
-
-  function connectAndRun() {
-    if(isRunning) return;
-    
-    liveConsole.style.display = 'block';
-    appendTerminal('system', 'init', 'Connecting to PANDA backend WebSocket...');
-    
-    ws = new WebSocket('ws://' + window.location.host + '/ws/run');
-    
-    ws.onopen = function() {
-      isRunning = true;
-      toggleBtnLabel.textContent = 'Assessment Running...';
-      toggleBtn.disabled = true;
-      livePill.classList.remove('paused');
-      livePillLabel.textContent = 'Live';
-      
-      // Send config
-      ws.send(JSON.stringify({ target_url: targetUrl, allow_write: allowWrite }));
-      appendTerminal('system', 'connected', 'Triggered PANDA pipeline against ' + targetUrl);
-    };
-    
-    ws.onmessage = function(e) {
-      try {
-        var msg = JSON.parse(e.data);
-        
-        // Progress / Phase updates
-        if(msg.type === 'phase_start' || msg.type === 'phase_complete') {
-            if(msg.phase) setPhase(msg.phase, msg.progress);
-        } else if (msg.progress !== undefined) {
-            phaseProgress.style.width = msg.progress + '%';
+      // ——— Counter Animation ———
+      function animateCounter(el, target, duration) {
+        var start = parseInt(el.textContent) || 0;
+        if (start === target) return;
+        var startTime = null;
+        function step(ts) {
+          if (!startTime) startTime = ts;
+          var progress = Math.min((ts - startTime) / duration, 1);
+          var eased = 1 - Math.pow(1 - progress, 3);
+          el.textContent = Math.round(start + (target - start) * eased);
+          if (progress < 1) requestAnimationFrame(step);
         }
-        
-        // Render findings
-        if(msg.findings && msg.findings.length > 0) {
-            renderFindings(msg.findings);
-        }
-        
-        // Render API Calls
-        if(msg.agent === 'executor' && msg.action === 'called tool') {
-             // Try to parse out method, path, status from detail string like "GET /api/v1/users (anonymous) -> 200"
-             var m = msg.detail.match(/^([A-Z]+)\s+(.*?)\s+\(.*?\)\s*->\s*(\d+)/);
-             if(m) {
-                 logApiCall(m[1], m[2], m[3], 50 + Math.random()*100);
-             }
-        }
-        
-        var isErr = msg.type === 'error';
-        appendTerminal(msg.agent, msg.action, msg.detail || '', isErr);
-        
-      } catch(err) {
-        console.error("Error parsing WS message", err);
+        requestAnimationFrame(step);
       }
-    };
-    
-    ws.onclose = function() {
-      isRunning = false;
-      toggleBtnLabel.textContent = 'Run Live Assessment';
-      toggleBtn.disabled = false;
-      livePill.classList.add('paused');
-      livePillLabel.textContent = 'Paused';
-      appendTerminal('system', 'disconnected', 'Pipeline connection closed.');
-    };
-    
-    ws.onerror = function(err) {
-      appendTerminal('system', 'error', 'WebSocket error', true);
-    };
-  }
 
-  toggleBtn.addEventListener('click', function(){
-      if(!isRunning) {
-          checksCount = 0;
-          statChecks.textContent = '0';
-          apiLog.innerHTML = '';
-          terminalLog.innerHTML = '';
-          connectAndRun();
+      // ——— Target form ———
+      var modeDemoBtn = document.getElementById('modeDemoBtn');
+      var modeCustomBtn = document.getElementById('modeCustomBtn');
+
+      modeDemoBtn.addEventListener('click', function () {
+        modeDemoBtn.classList.add('active');
+        modeCustomBtn.classList.remove('active');
+        targetForm.hidden = true;
+      });
+      modeCustomBtn.addEventListener('click', function () {
+        modeCustomBtn.classList.add('active');
+        modeDemoBtn.classList.remove('active');
+        targetForm.hidden = false;
+      });
+
+      targetForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (targetInput.value) {
+          targetUrl = targetInput.value;
+          if (!/^https?:\/\//i.test(targetUrl)) targetUrl = 'http://' + targetUrl;
+          targetActiveLabel.textContent = targetUrl;
+        }
+      });
+
+      // ——— Pipeline visualization ———
+      var phases = ['recon', 'understanding', 'threat_modeling', 'test_planning', 'execution', 'reporting'];
+      var phaseNames = { recon: 'Reconnaissance', understanding: 'API Understanding', threat_modeling: 'Threat Modeling', test_planning: 'Test Planning', execution: 'Execution', reporting: 'Report Generation' };
+
+      function setPipelineState(activePhase, progress) {
+        var activeIdx = phases.indexOf(activePhase);
+        phases.forEach(function (p, i) {
+          var node = document.getElementById('pnode-' + p);
+          if (!node) return;
+          node.classList.remove('active', 'complete');
+          if (i < activeIdx) node.classList.add('complete');
+          else if (i === activeIdx) node.classList.add('active');
+        });
+        if (progress !== undefined) {
+          pipeLineFill.style.width = progress + '%';
+        }
+
+        // Show corresponding detail card
+        phases.forEach(function (p) {
+          var card = document.getElementById('detail-' + p);
+          if (card) {
+            card.classList.remove('visible');
+            card.style.display = 'none';
+          }
+        });
+        var activeCard = document.getElementById('detail-' + activePhase);
+        if (activeCard) {
+          activeCard.style.display = 'block';
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              activeCard.classList.add('visible');
+            });
+          });
+        }
       }
-  });
 
-})();
-</script>
+      function setAgentState(agentId, state, logLine) {
+        var card = document.getElementById('acard-' + agentId);
+        if (!card) return;
+        card.classList.remove('active', 'done');
+        if (state === 'active') card.classList.add('active');
+        if (state === 'done') card.classList.add('done');
+
+        var statusText = card.querySelector('.status-text');
+        if (state === 'active') statusText.textContent = 'Running';
+        else if (state === 'done') statusText.textContent = 'Complete';
+        else statusText.textContent = 'Idle';
+
+        if (logLine) {
+          var logEl = card.querySelector('.agent-card-log');
+          var line = document.createElement('div');
+          line.textContent = logLine;
+          logEl.appendChild(line);
+          while (logEl.children.length > 2) logEl.removeChild(logEl.firstChild);
+        }
+      }
+
+      // ——— Terminal ———
+      function appendTerminal(agent, detail, cls) {
+        var line = document.createElement('div');
+        var d = new Date();
+        var time = String(d.getHours()).padStart(2, '0') + ':' +
+          String(d.getMinutes()).padStart(2, '0') + ':' +
+          String(d.getSeconds()).padStart(2, '0');
+        line.innerHTML = '<span class="t-time">' + time + '</span>' +
+          '<span class="t-agent">[' + agent + ']</span> ' +
+          '<span class="' + (cls || 't-dim') + '">' + detail + '</span>';
+        terminalLog.appendChild(line);
+        terminalLog.scrollTop = terminalLog.scrollHeight;
+      }
+
+      function setConsoleProgress(pct, label) {
+        consoleProgressFill.style.width = pct + '%';
+        consolePct.textContent = pct + '%';
+        if (label) consolePhaseLabel.textContent = label;
+      }
+
+      // ——— Simulation Data ———
+      var simPhases = [
+        {
+          id: 'recon', progress: 15, logs: [
+            { agent: 'recon', detail: 'Crawling target: ' + targetUrl },
+            { agent: 'recon', detail: 'Discovered 14 endpoints across 5 resources', cls: 't-ok' },
+            { agent: 'recon', detail: 'Detected Bearer + API-Key auth schemes' },
+            { agent: 'recon', detail: 'Surface area mapped. 2 admin routes found.' },
+          ]
+        },
+        {
+          id: 'understanding', progress: 35, logs: [
+            { agent: 'understanding', detail: 'Analyzing endpoint semantics via LLM...' },
+            { agent: 'understanding', detail: 'Inferred 4 resource groups: users, orders, products, admin' },
+            { agent: 'understanding', detail: 'Data flow analysis complete. 3 PII-handling routes.' },
+          ]
+        },
+        {
+          id: 'threat_modeling', progress: 50, logs: [
+            { agent: 'threat_modeling', detail: 'Generating security hypotheses...' },
+            { agent: 'threat_modeling', detail: 'H-001: Broken Object-Level Authorization on /api/users/{id}', cls: 't-warn' },
+            { agent: 'threat_modeling', detail: 'H-002: Mass Assignment on POST /api/users', cls: 't-warn' },
+            { agent: 'threat_modeling', detail: '8 hypotheses generated across OWASP API Top 10' },
+          ]
+        },
+        {
+          id: 'test_planning', progress: 62, logs: [
+            { agent: 'planner', detail: 'Planning probes for 8 hypotheses...' },
+            { agent: 'planner', detail: 'Test T-001: GET /api/users/2 with user-1 token → expect 403' },
+            { agent: 'planner', detail: 'Test T-002: POST /api/users {role:admin} → expect rejection' },
+            { agent: 'planner', detail: '12 test cases ready for execution.' },
+          ]
+        },
+        {
+          id: 'execution', progress: 82, logs: [
+            { agent: 'executor', detail: 'Executing 12 tests against live target...' },
+            { agent: 'executor', detail: 'T-001: GET /api/users/2 → 200 (expected 403)', cls: 't-err' },
+            { agent: 'executor', detail: 'T-002: POST /api/users {role:admin} → 200', cls: 't-err' },
+            { agent: 'executor', detail: 'T-003: GET /api/admin/config → 401', cls: 't-ok' },
+            { agent: 'executor', detail: '8/12 tests complete. 3 vulnerabilities confirmed.' },
+            { agent: 'executor', detail: 'Iteration 1 analysis complete. Continuing investigation...' },
+          ]
+        },
+        {
+          id: 'reporting', progress: 95, logs: [
+            { agent: 'reporter', detail: 'Compiling findings from 2 investigation iterations...' },
+            { agent: 'reporter', detail: '3 findings: 1 Critical, 1 High, 1 Medium' },
+            { agent: 'reporter', detail: 'Markdown report generated → reports/assessment.md', cls: 't-ok' },
+          ]
+        }
+      ];
+
+      var simFindings = [
+        { id: 'VULN-001', title: 'Broken Object-Level Authorization', severity: 'CRITICAL', owasp_category: 'API1:2023' },
+        { id: 'VULN-002', title: 'Mass Assignment — Role Escalation', severity: 'HIGH', owasp_category: 'API6:2023' },
+        { id: 'VULN-003', title: 'Excessive Data Exposure on User Profile', severity: 'MEDIUM', owasp_category: 'API3:2023' },
+      ];
+
+      var simReport = `# PANDA Security Assessment Report
+
+- **Target:** \`http://127.0.0.1:8000\`
+- **Generated:** \`2026-09-23T10:30:00Z\`
+- **API:** User management — Internal API for managing AcmeCorp employee accounts and reports.
+- **Findings:** 3 (2 high/critical)
+
+---
+
+## Executive Summary
+
+The assessment identified multiple severe vulnerabilities that allow unauthorized access to sensitive data and privilege escalation. The most critical issue is a Broken Object-Level Authorization (BOLA) flaw allowing any authenticated user to access any other user's profile. Additionally, a Mass Assignment vulnerability allows standard users to escalate their privileges to "admin" during account creation.
+
+---
+
+## Security Findings
+
+### 🔴 VULN-001: Broken Object-Level Authorization
+
+| Property | Value |
+|----------|-------|
+| **Severity** | CRITICAL |
+| **OWASP Category** | API1:2023-BOLA |
+| **Confidence** | 100% |
+
+**Description:** The endpoint \`/api/users/{id}\` does not perform ownership checks. Any authenticated user can access the profile details of any other user by simply changing the ID in the URL.
+
+**Impact:** Complete exposure of all user profiles and personally identifiable information (PII).
+
+**Evidence:**
+- \`GET /api/users/2\` executed with user-1's token returned a 200 OK with user-2's data.
+
+**Remediation:** Implement authorization checks on the server side to ensure the requested resource belongs to the authenticated user.
+
+### 🟠 VULN-002: Mass Assignment — Role Escalation
+
+| Property | Value |
+|----------|-------|
+| **Severity** | HIGH |
+| **OWASP Category** | API6:2023-Unrestricted-Access-to-Sensitive-Business-Flows |
+| **Confidence** | 100% |
+
+**Description:** The \`POST /api/users\` endpoint accepts the \`role\` field directly from the request body without validation or stripping.
+
+**Impact:** A standard user can create an account with administrative privileges, gaining full control over the system.
+
+**Evidence:**
+- \`POST /api/users\` with payload \`{"role": "admin"}\` succeeded and returned an admin account.
+
+**Remediation:** Explicitly define which fields are allowed to be updated by users. Never bind client input directly to sensitive fields like roles or permissions.
+`;
+
+      // ——— API log simulation ———
+      function logApiCall(method, path, status, ms) {
+        checksCount++;
+        statChecks.textContent = checksCount;
+        var statusClass = status >= 400 ? 's4' : (status >= 200 && status < 300 ? 's2' : '');
+        var line = document.createElement('div');
+        var d = new Date();
+        var time = String(d.getHours()).padStart(2, '0') + ':' +
+          String(d.getMinutes()).padStart(2, '0') + ':' +
+          String(d.getSeconds()).padStart(2, '0');
+        line.innerHTML = time + '&nbsp;&nbsp;<span class="m">' + String(method).padEnd(5) +
+          '</span>' + path + '&nbsp;&nbsp;<span class="' + statusClass + '">' + status +
+          '</span>&nbsp;&nbsp;' + Math.round(ms) + 'ms';
+        apiLog.appendChild(line);
+        while (apiLog.children.length > 50) apiLog.removeChild(apiLog.firstChild);
+        apiLog.scrollTop = apiLog.scrollHeight;
+      }
+
+      // ——— Findings rendering ———
+      function renderFindings(findings) {
+        if (!findings || !findings.length) return;
+        findingsEmpty.style.display = 'none';
+        animateCounter(statFindings, findings.length, 600);
+        findingsList.innerHTML = '';
+        findings.forEach(function (f, i) {
+          var el = document.createElement('div');
+          var sevClass = f.severity.toLowerCase();
+          el.className = 'finding sev-' + sevClass;
+          el.style.animationDelay = (i * 0.08) + 's';
+          el.innerHTML =
+            '<span class="sev-chip sev-' + sevClass + '">' + f.severity + '</span>' +
+            '<div class="finding-main"><h4>' + f.title + '</h4>' +
+            '<div class="meta">' + f.owasp_category + ' · ' + f.id + '</div></div>';
+          findingsList.appendChild(el);
+        });
+      }
+
+      function renderMarkdownReport(markdownContent) {
+        reportSection.style.display = 'block';
+        if (typeof marked !== 'undefined') {
+          markdownReport.innerHTML = marked.parse(markdownContent);
+        } else {
+          markdownReport.innerHTML = '<pre>' + markdownContent + '</pre>';
+        }
+        reportSection.classList.add('visible');
+      }
+
+      // ——— Run Simulation ———
+      function runSimulation() {
+        if (isRunning) return;
+        isRunning = true;
+
+        // Show console
+        consoleSection.style.display = '';
+        consoleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        toggleBtnLabel.textContent = 'Running…';
+        toggleBtn.disabled = true;
+
+        terminalLog.innerHTML = '';
+        checksCount = 0;
+        statChecks.textContent = '0';
+        apiLog.innerHTML = '';
+        findingsList.innerHTML = '';
+        findingsEmpty.style.display = '';
+        reportSection.style.display = 'none';
+        markdownReport.innerHTML = '';
+
+        appendTerminal('system', 'Pipeline started against ' + targetUrl, 't-ok');
+
+        // Reset all agents and pipeline
+        phases.forEach(function (p) {
+          setAgentState(p, 'idle');
+          var node = document.getElementById('pnode-' + p);
+          if (node) node.classList.remove('active', 'complete');
+        });
+        pipeLineFill.style.width = '0%';
+
+        var phaseIdx = 0;
+        var logIdx = 0;
+
+        function nextLog() {
+          if (phaseIdx >= simPhases.length) {
+            // Done
+            setConsoleProgress(100, 'Complete');
+            pipeLineFill.style.width = '100%';
+            phases.forEach(function (p) {
+              var node = document.getElementById('pnode-' + p);
+              if (node) { node.classList.remove('active'); node.classList.add('complete'); }
+            });
+            appendTerminal('system', 'Assessment complete. 3 findings generated.', 't-ok');
+            renderFindings(simFindings);
+            renderMarkdownReport(simReport);
+
+            // Simulate some API calls during execution
+            var apiCalls = [
+              ['GET', '/api/users', 200, 45],
+              ['GET', '/api/users/2', 200, 62],
+              ['POST', '/api/users', 200, 88],
+              ['GET', '/api/admin/config', 401, 34],
+              ['GET', '/api/products', 200, 51],
+              ['PUT', '/api/users/1', 200, 73],
+              ['DELETE', '/api/orders/5', 403, 41],
+            ];
+            apiCalls.forEach(function (c, i) {
+              setTimeout(function () { logApiCall(c[0], c[1], c[2], c[3]); }, i * 100);
+            });
+
+            isRunning = false;
+            toggleBtnLabel.textContent = 'Run Assessment';
+            toggleBtn.disabled = false;
+            return;
+          }
+
+          var phase = simPhases[phaseIdx];
+
+          if (logIdx === 0) {
+            // Enter this phase
+            setPipelineState(phase.id, phase.progress);
+            setConsoleProgress(phase.progress, phaseNames[phase.id]);
+            setAgentState(phase.id, 'active');
+
+            // Mark previous agent as done
+            if (phaseIdx > 0) {
+              setAgentState(simPhases[phaseIdx - 1].id, 'done');
+            }
+          }
+
+          if (logIdx < phase.logs.length) {
+            var log = phase.logs[logIdx];
+            appendTerminal(log.agent, log.detail, log.cls || 't-dim');
+            setAgentState(phase.id, 'active', log.detail);
+            logIdx++;
+            simTimer = setTimeout(nextLog, 600 + Math.random() * 500);
+          } else {
+            // Move to next phase
+            logIdx = 0;
+            phaseIdx++;
+            simTimer = setTimeout(nextLog, 400);
+          }
+        }
+
+        simTimer = setTimeout(nextLog, 800);
+      }
+
+      // ——— WebSocket live run ———
+      function connectAndRun() {
+        if (isRunning) return;
+
+        consoleSection.style.display = '';
+        consoleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        appendTerminal('system', 'Connecting to Agent backend…');
+
+        ws = new WebSocket('ws://' + window.location.host + '/ws/run');
+
+        ws.onopen = function () {
+          isRunning = true;
+          toggleBtnLabel.textContent = 'Running…';
+          toggleBtn.disabled = true;
+          ws.send(JSON.stringify({ target_url: targetUrl, allow_write: true }));
+          appendTerminal('system', 'Connected. Pipeline triggered against ' + targetUrl, 't-ok');
+        };
+
+        ws.onmessage = function (e) {
+          try {
+            var msg = JSON.parse(e.data);
+
+            if (msg.type === 'phase_start' || msg.type === 'phase_complete') {
+              if (msg.phase) {
+                setPipelineState(msg.phase, msg.progress);
+                setConsoleProgress(msg.progress || 0, phaseNames[msg.phase] || msg.phase);
+                if (msg.type === 'phase_start') setAgentState(msg.phase, 'active');
+                if (msg.type === 'phase_complete') setAgentState(msg.phase, 'done');
+              }
+            } else if (msg.progress !== undefined) {
+              setConsoleProgress(msg.progress);
+            }
+
+            if (msg.findings && msg.findings.length > 0) {
+              renderFindings(msg.findings);
+            }
+
+            if (msg.agent === 'executor' && msg.action === 'called tool') {
+              var m = msg.detail.match(/^([A-Z]+)\s+(.*?)\s+\(.*?\)\s*->\s*(\d+)/);
+              if (m) logApiCall(m[1], m[2], m[3], 50 + Math.random() * 100);
+            }
+
+            var cls = msg.type === 'error' ? 't-err' : 't-dim';
+            appendTerminal(msg.agent || 'system', msg.detail || '', cls);
+
+            if (msg.phase) setAgentState(msg.phase, 'active', msg.detail);
+            
+            if (msg.type === 'run_complete' && msg.markdown_report) {
+              renderMarkdownReport(msg.markdown_report);
+            }
+
+          } catch (err) {
+            console.error('WS parse error', err);
+          }
+        };
+
+        ws.onclose = function () {
+          isRunning = false;
+          toggleBtnLabel.textContent = 'Run Assessment';
+          toggleBtn.disabled = false;
+          appendTerminal('system', 'Connection closed.', 't-dim');
+        };
+
+        ws.onerror = function () {
+          appendTerminal('system', 'WebSocket connection failed. Running demo simulation.', 't-warn');
+          ws = null;
+          isRunning = false;
+          runSimulation();
+        };
+      }
+
+      // ——— Button handler ———
+      toggleBtn.addEventListener('click', function () {
+        if (isRunning) return;
+        checksCount = 0;
+        statChecks.textContent = '0';
+        apiLog.innerHTML = '';
+        terminalLog.innerHTML = '';
+
+        // Try live WebSocket first; fall back to simulation on error
+        connectAndRun();
+      });
+
+      // ——— Pipeline node hover ———
+      document.querySelectorAll('.pipeline-node').forEach(function (node) {
+        node.addEventListener('mouseenter', function () {
+          if (isRunning) return;
+          var phase = node.dataset.phase;
+          // Show detail card on hover
+          phases.forEach(function (p) {
+            var card = document.getElementById('detail-' + p);
+            if (card) { card.classList.remove('visible'); card.style.display = 'none'; }
+          });
+          var card = document.getElementById('detail-' + phase);
+          if (card) {
+            card.style.display = 'block';
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () { card.classList.add('visible'); });
+            });
+          }
+        });
+      });
+
+      // Show first detail card by default after a moment
+      setTimeout(function () {
+        var firstCard = document.getElementById('detail-recon');
+        if (firstCard) {
+          firstCard.style.display = 'block';
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () { firstCard.classList.add('visible'); });
+          });
+        }
+      }, 1000);
+
+    })();
+  </script>
 </body>
+
 </html>

@@ -119,6 +119,7 @@ def _emit_event(
     event_type: str = "agent_event",
     progress: int | None = None,
     findings: list[dict[str, Any]] | None = None,
+    markdown_report: str | None = None,
 ) -> None:
     event: dict[str, Any] = {
         "type": event_type,
@@ -136,6 +137,8 @@ def _emit_event(
         event["progress"] = progress
     if findings is not None:
         event["findings"] = findings
+    if markdown_report is not None:
+        event["markdown_report"] = markdown_report
     events.append(event)
 
     # Console output (unchanged)

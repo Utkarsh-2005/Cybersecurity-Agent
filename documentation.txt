@@ -1,0 +1,119 @@
+================================================================================
+                        PANDA SECURITY ASSESSMENT SYSTEM
+                               PROJECT DOCUMENTATION
+================================================================================
+
+1. PROJECT OVERVIEW
+--------------------------------------------------------------------------------
+Project Name: PANDA (Multi-Agent API Security Assessment)
+
+What it is: 
+PANDA is an autonomous, multi-agent cybersecurity system designed to perform automated penetration testing on APIs. It uses a combination of deterministic network probing and advanced Large Language Model (LLM) reasoning to discover, analyze, and exploit vulnerabilities in web APIs without human intervention.
+
+Problem it solves:
+Traditional API security testing is highly manual, time-consuming, and requires expensive security experts. Automated scanners (like OWASP ZAP) only find basic, signature-based flaws (like missing headers or outdated software) but fail to understand complex business logic flaws (like Broken Object Level Authorization or Mass Assignment). PANDA solves this by using AI to actually "understand" what the API does, just like a human hacker would, allowing it to find deep logical vulnerabilities autonomously.
+
+Main Objective:
+To create an intelligent, orchestrated pipeline of AI agents that can automatically crawl an API, understand its business context, generate threat hypotheses based on the OWASP API Security Top 10, design safe test cases, execute them against the live target, and generate a professional security report.
+
+
+2. TECHNOLOGIES USED
+--------------------------------------------------------------------------------
+- Core Language: Python 3.10+
+- AI/LLM Frameworks: LangGraph (for multi-agent orchestration) and LangChain (for LLM interaction)
+- AI Model: OpenAI GPT-4o-mini (accessed via OpenRouter API)
+- Backend & Mock API: FastAPI and Uvicorn (for building the target vulnerable application)
+- Real-time Communication: WebSockets (for live frontend updates)
+- Frontend: HTML5, CSS3 (Apple-inspired UI), Vanilla JavaScript
+- Data Validation: Pydantic (for strictly typing agent outputs and LLM JSON responses)
+- Networking: Python `requests` library (for the execution engine)
+
+
+3. PROJECT ARCHITECTURE & WORKFLOW
+--------------------------------------------------------------------------------
+The system uses a "Supervisor Pattern" via LangGraph. An orchestrator routes work to 6 specialized agents in a linear pipeline.
+
+Step-by-Step Workflow:
+1. Reconnaissance (Deterministic):
+   The Recon Agent crawls the target URL, looks for OpenAPI/Swagger documentation, probes for hidden/undocumented paths (e.g., /admin, /api/v1), and captures baseline HTTP responses and security headers using different authentication profiles (e.g., user-token vs admin-token).
+
+2. API Understanding (AI-Driven):
+   The Understanding Agent takes the raw recon data and uses the LLM to infer the business logic. It identifies the data models (Users, Orders), sensitive fields (PII), and how the authentication mechanism works.
+
+3. Threat Modeling (AI-Driven):
+   The Threat Modeling Agent compares the API's behavior against the OWASP API Security Top 10 (2023). It generates ranked threat hypotheses (e.g., "The API might be vulnerable to BOLA on the /api/users/{id} endpoint").
+
+4. Test Planning (AI-Driven):
+   The Test Planning Agent designs specific, safe HTTP requests (probes) to prove or disprove each threat hypothesis. It defines exactly what payload to send and what the expected vulnerable/safe responses look like.
+
+5. Execution & Analysis (Hybrid):
+   The Execution Agent sends the planned HTTP requests to the live target API. It captures the real responses, and the LLM analyzes them to see if the vulnerability was confirmed, rejected, or if more testing is needed.
+
+6. Reporting (AI-Driven):
+   The Reporting Agent takes all confirmed findings, writes an executive summary, maps vulnerabilities to OWASP categories, provides remediation steps, and outputs a professional Markdown report, which is also rendered on the web dashboard.
+
+
+4. MAJOR FEATURES
+--------------------------------------------------------------------------------
+- Autonomous Execution: Requires only a target URL and optional authentication tokens to run a full penetration test.
+- Business Logic Testing: Capable of finding BOLA (Broken Object Level Authorization), BFLA, and Mass Assignment vulnerabilities.
+- Live Web Dashboard: A beautiful, real-time UI that shows exactly what the agents are thinking, what HTTP calls they are making, and what vulnerabilities they are finding as they happen.
+- Deterministic + AI Hybrid: Uses standard Python HTTP requests for reliable scanning, and LLMs for intelligent analysis.
+- Built-in Vulnerable Target: Includes a custom "Mock API" purposefully built with OWASP top 10 vulnerabilities to demonstrate the tool's capabilities.
+
+
+================================================================================
+                            DIVISION OF WORK & VIVA SCRIPTS
+================================================================================
+
+Below is the division of work for a 5-member team. Each member's section includes exactly what they contributed to the actual codebase, and a script they can use during the presentation/viva.
+
+--------------------------------------------------------------------------------
+MEMBER 1: [Insert Name]
+Role: Reconnaissance & Discovery Engine Developer
+--------------------------------------------------------------------------------
+Contribution:
+Developed `recon.py`. Built the deterministic crawling engine that discovers OpenAPI schemas, probes undocumented paths (like /actuator, /admin), tests write-methods with empty bodies, and fingerprints HTTP security headers. 
+
+Viva Script:
+"Hello, my name is [Name], and I developed the Reconnaissance Engine for PANDA. Before the AI can analyze an API, it needs raw data. I built the `recon.py` module, which acts as the eyes of our system. It's a deterministic Python script that automatically discovers OpenAPI documentation, probes common hidden endpoints like `/admin` or `/debug`, and captures baseline HTTP responses using different authentication tokens. It also fingerprints security headers to check for misconfigurations like missing CORS policies. I chose to use the `requests` library for this instead of AI to ensure the scanning is fast, reliable, and doesn't waste expensive LLM tokens on basic web scraping. My output creates the foundation that the AI agents use for their analysis."
+
+--------------------------------------------------------------------------------
+MEMBER 2: [Insert Name]
+Role: AI Logic & Threat Modeling Engineer
+--------------------------------------------------------------------------------
+Contribution:
+Developed `understanding.py` and `threat_modeling.py`. Designed the complex prompt engineering required to force the LLM to output strict JSON using Pydantic models (`models.py`). Mapped the OWASP API Top 10 to the AI's reasoning engine.
+
+Viva Script:
+"Hi, I'm [Name]. I was responsible for the core AI reasoning of PANDA, specifically the API Understanding and Threat Modeling agents. My job was to take the raw HTTP data gathered during recon and feed it to our Large Language Model to simulate a human hacker's brain. I wrote the prompts in `threat_modeling.py` that force the AI to analyze the API's business logic and generate ranked threat hypotheses based on the OWASP API Security Top 10. A major technical challenge I solved was ensuring the AI's output was predictable; I implemented strict Pydantic models in `models.py` to force the LLM to return perfectly formatted JSON, rather than raw text. This allows our pipeline to programmatically parse the AI's thoughts and pass them to the next agent."
+
+--------------------------------------------------------------------------------
+MEMBER 3: [Insert Name]
+Role: Execution Engine & Multi-Agent Orchestrator
+--------------------------------------------------------------------------------
+Contribution:
+Developed `test_planning.py`, `execution.py`, and `pipeline.py`. Implemented the LangGraph state machine that connects all agents together. Built the `LiveHTTPExecutor` that safely fires the AI-generated test payloads at the live server.
+
+Viva Script:
+"Hello, I'm [Name], and I built the Execution Engine and the LangGraph orchestration pipeline. Once the AI generates a threat hypothesis, it needs to be proven. I wrote the `test_planning.py` module where the AI designs specific HTTP requests, like trying to access User A's data using User B's token to test for BOLA. I then built the `LiveHTTPExecutor` which takes these AI-designed tests and physically executes them against the live server using the Python `requests` library. Finally, I tied the entire project together in `pipeline.py` using the LangGraph framework, implementing a Supervisor pattern where an orchestrator agent routes the output of one phase sequentially into the next, managing the state and the investigation loop until the penetration test is complete."
+
+--------------------------------------------------------------------------------
+MEMBER 4: [Insert Name]
+Role: Target Application (Mock API) Developer
+--------------------------------------------------------------------------------
+Contribution:
+Developed the `mock_api/` directory (including `app.py`, `routes.py`, `data_store.py`). Built a vulnerable FastAPI backend application specifically designed to contain real-world flaws like BOLA, Mass Assignment, and SSRF so PANDA has something to attack.
+
+Viva Script:
+"Hi, I'm [Name]. To prove that our AI agents actually work, we needed a realistic, vulnerable target to attack. I developed the backend target application located in the `mock_api` folder using FastAPI. I purposely engineered it to contain specific, realistic vulnerabilities from the OWASP Top 10. For example, I implemented a Broken Object Level Authorization (BOLA) flaw where users can access other users' orders by simply changing the ID in the URL, and a Mass Assignment vulnerability where a standard user can elevate themselves to an admin by injecting a role field in a JSON payload. Building this required a deep understanding of how these vulnerabilities occur in real-world backend code, and it serves as the ultimate testbed for our PANDA agents to exploit."
+
+--------------------------------------------------------------------------------
+MEMBER 5: [Insert Name]
+Role: Real-time Frontend & Reporting Developer
+--------------------------------------------------------------------------------
+Contribution:
+Developed `index.html`, `ws_server.py`, and `reporting.py`. Built the Apple-inspired, real-time web dashboard using Vanilla JS, HTML, and CSS. Implemented WebSockets to stream live agent thoughts and terminal logs to the browser. Designed the automated Markdown report generator.
+
+Viva Script:
+"Hello, my name is [Name], and I developed the Real-time Web Dashboard and Reporting Engine. Because PANDA operates autonomously in the background, we needed a way to visualize its thought process. I built the frontend interface in `index.html` using a clean, modern aesthetic with Vanilla CSS and JavaScript. To make it real-time, I implemented a WebSocket server in Python that streams the AI's internal logs, HTTP calls, and progress directly to the browser's terminal UI without requiring page reloads. Finally, I built the `reporting.py` agent, which takes all confirmed vulnerabilities at the end of the run and uses the LLM to generate a professional, structured Markdown report complete with executive summaries, evidence, and remediation steps."

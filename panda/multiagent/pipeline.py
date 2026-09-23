@@ -231,6 +231,6 @@ def run_panda_assessment(target_url: str, *, allow_write: bool = True) -> str:
 
     _emit_event(events, "pipeline", "run_complete",
                 detail=f"Assessment complete. {len(report.findings)} findings. Report: {report_path}",
-                event_type="run_complete", progress=100)
+                event_type="run_complete", progress=100, markdown_report=markdown)
 
     return markdown
