@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Multi-Agent Vulnerability and Endpoint Security System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #eef0f2;
+    --panel: #ffffff;
+    --panel-alt: #f4f5f7;
+    --ink: #20242a;
+    --ink-soft: #5b6470;
+    --line: #d8dce1;
+    --line-strong: #c1c6cd;
+    --accent: #3a6ea5;
+    --accent-ink: #ffffff;
+    --accent-soft: #e4ecf4;
+    --risk: #b4532a;
+    --risk-soft: #f5e5dd;
+    --warn: #a5791f;
+    --warn-soft: #f4ecd8;
+    --ok: #3f7d58;
+    --ok-soft: #e1ede5;
+    --radius-s: 4px;
+    --radius-m: 8px;
+    --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  }
+
+  *{ box-sizing: border-box; }
+  html{ scroll-padding-top: env(safe-area-inset-top, 0px); scroll-behavior: smooth; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    -webkit-font-smoothing: antialiased;
+  }
+  img{ max-width:100%; }
+  a{ color: inherit; }
+  h1,h2,h3{ margin:0; font-weight:600; letter-spacing:-0.01em; }
+  p{ margin:0; }
+  button{ font-family: inherit; }
+
+  :focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .wrap{ max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+  @media (max-width: 560px){ .wrap{ padding: 0 18px; } }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .topbar .wrap{
+    display:flex; align-items:center; justify-content:space-between;
+    height: 60px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; font-weight:600; font-size: 15px; }
+  .topbar nav{ display:flex; gap: 22px; font-size: 14px; color: var(--ink-soft); }
+  .topbar nav a{ text-decoration:none; }
+  .topbar nav a:hover{ color: var(--ink); }
+  @media (max-width: 720px){ .topbar nav{ display:none; } }
+
+  /* ---------- Hero ---------- */
+  .hero{
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  .hero .wrap{
+    display:grid;
+    grid-template-columns: 1.3fr 0.9fr;
+    gap: 56px;
+    align-items: center;
+    padding-top: 64px;
+    padding-bottom: 56px;
+  }
+  @media (max-width: 900px){
+    .hero .wrap{ grid-template-columns: 1fr; padding-top: 40px; padding-bottom: 32px; gap: 32px; }
+  }
+  .hero-eyebrow{
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 500;
+    margin-bottom: 14px;
+  }
+  .hero h1{
+    font-size: clamp(32px, 4.4vw, 50px);
+    line-height: 1.08;
+    max-width: 15ch;
+  }
+  .hero p.lede{
+    margin-top: 18px;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: 46ch;
+  }
+  .hero-actions{ display:flex; gap: 12px; margin-top: 30px; flex-wrap: wrap; }
+
+  .btn{
+    display:inline-flex; align-items:center; gap:8px;
+    border-radius: var(--radius-s);
+    padding: 12px 20px;
+    font-size: 14.5px;
+    font-weight: 600;
+    text-decoration:none;
+    border: 1px solid transparent;
+    cursor:pointer;
+    transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
+  }
+  .btn:active{ transform: translateY(1px); }
+  .btn-primary{ background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:hover{ background:#325f8e; }
+  .btn-secondary{ background: transparent; color: var(--ink); border-color: var(--line-strong); }
+  .btn-secondary:hover{ border-color: var(--ink); }
+  .btn-quiet{ background: var(--panel-alt); color: var(--ink); border-color: var(--line); }
+  .btn-quiet:hover{ background: var(--accent-soft); }
+  .btn[disabled]{ opacity:.5; cursor:not-allowed; }
+  .btn .dot{ width:7px; height:7px; border-radius:50%; background: currentColor; }
+
+  /* hero live widget */
+  .hero-widget{
+    background: var(--panel-alt);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 22px;
+  }
+  .hero-widget-top{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom: 18px;
+  }
+  .hero-widget-top span{ font-size: 13px; color: var(--ink-soft); }
+  .live-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size: 12px; font-weight:600; color: var(--ok);
+    background: var(--ok-soft); padding: 4px 9px; border-radius: 999px;
+  }
+  .live-pill .pulse-dot{
+    width:6px; height:6px; border-radius:50%; background: var(--ok);
+    animation: pulse-op 1.6s ease-in-out infinite;
+  }
+  .live-pill.paused{ color: var(--ink-soft); background: var(--panel); border:1px solid var(--line); }
+  .live-pill.paused .pulse-dot{ background: var(--ink-soft); animation:none; }
+
+  .stat-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .stat{ background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-s); padding: 14px; }
+  .stat .n{ font-family: var(--font-mono); font-size: 24px; font-weight:600; }
+  .stat .l{ font-size: 12.5px; color: var(--ink-soft); margin-top:4px; }
+
+  /* ---------- Target picker ---------- */
+  .target-bar{
+    background: var(--panel-alt);
+    border-bottom: 1px solid var(--line);
+  }
+  .target-bar .wrap{ padding-top: 22px; padding-bottom: 22px; }
+  .target-row{ display:flex; align-items:center; gap: 14px; flex-wrap: wrap; }
+  .mode-switch{
+    display:inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-s);
+    padding: 3px; flex: none;
+  }
+  .mode-btn{
+    border: none; background: transparent; color: var(--ink-soft);
+    font-size: 13.5px; font-weight: 600; padding: 8px 14px; border-radius: 3px; cursor:pointer;
+  }
+  .mode-btn.active{ background: var(--ink); color: #fff; }
+  .mode-btn:hover:not(.active){ color: var(--ink); }
+
+  .target-form{ display:flex; align-items:center; gap: 10px; flex: 1 1 380px; min-width: 260px; }
+  .target-form[hidden]{ display:none; }
+  .url-field{ position:relative; flex: 1 1 auto; }
+  .url-field input{
+    width:100%; padding: 11px 14px; font-size: 14px; font-family: var(--font-mono);
+    border: 1px solid var(--line-strong); border-radius: var(--radius-s);
+    background: var(--panel); color: var(--ink);
+  }
+  .url-field input::placeholder{ color: #9aa2ac; }
+  .url-field input:focus{ border-color: var(--accent); }
+  .url-field input.invalid{ border-color: var(--risk); }
+  .target-form .btn{ flex: none; }
+
+  .target-help{ font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
+  .target-help.error{ color: var(--risk); font-weight: 600; }
+
+  .target-active{
+    margin-top: 14px; display:flex; align-items:center; gap: 10px; font-size: 13px; color: var(--ink-soft);
+  }
+  .target-active strong{ color: var(--ink); font-family: var(--font-mono); font-weight: 600; }
+  .sim-note{
+    display:inline-flex; align-items:center; gap:6px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  }
+  .sim-note[hidden]{ display:none; }
+
+  /* ---------- Sections ---------- */
+  section{ padding: 64px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type{ border-bottom: none; }
+  .section-head{ display:flex; justify-content:space-between; align-items:flex-end; gap: 24px; margin-bottom: 30px; flex-wrap: wrap; }
+  .section-head h2{ font-size: 25px; }
+  .section-head p{ color: var(--ink-soft); font-size: 14.5px; margin-top: 6px; max-width: 52ch; }
+
+  /* ---------- Workflow diagram ---------- */
+  .flow-svg-wrap{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 6px 6px 0;
+    margin-bottom: 26px;
+  }
+  .flow-svg-wrap svg{ display:block; width:100%; height:auto; }
+  .flow-caption{
+    font-size: 13px; line-height: 1.6; color: var(--ink-soft);
+    padding: 0 18px 18px; margin: 0;
+  }
+
+  .langgraph-panel{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    overflow: hidden;
+    margin-top: 22px;
+  }
+  .langgraph-panel .panel-head{ padding: 13px 18px; }
+  .langgraph-intro{
+    font-size: 13.5px; line-height: 1.6; color: var(--ink-soft);
+    padding: 16px 18px 0;
+  }
+  .langgraph-intro em{ color: var(--ink); font-style: normal; font-weight: 600; }
+  .code-block{
+    margin: 14px 0 0;
+    padding: 16px 18px 18px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--ink);
+    background: var(--panel-alt);
+    overflow-x: auto;
+    border-top: 1px solid var(--line);
+  }
+  .code-block code{ white-space: pre; }
+
+  .agent-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px;
+  }
+  .agent-card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 16px;
+    display:flex; flex-direction:column; gap: 10px;
+  }
+  .agent-card-top{ display:flex; align-items:center; gap:10px; }
+  .agent-icon{
+    width: 32px; height: 32px; flex:none;
+    border-radius: 7px;
+    background: var(--accent-soft);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .agent-icon svg{ width:16px; height:16px; stroke: var(--accent); }
+  .agent-name{ font-size: 14.5px; font-weight:600; }
+  .agent-role{ font-size: 12.5px; color: var(--ink-soft); line-height:1.4; }
+
+  .agent-status-row{ display:flex; align-items:center; justify-content:space-between; font-size:12px; }
+  .agent-status{ display:flex; align-items:center; gap:6px; font-weight:600; color: var(--ok); }
+  .agent-status .pulse-dot{ width:6px; height:6px; border-radius:50%; background: var(--ok); animation: pulse-op 1.4s ease-in-out infinite; }
+  .agent-status.idle{ color: var(--ink-soft); }
+  .agent-status.idle .pulse-dot{ background: var(--ink-soft); animation: none; }
+  .agent-count{ font-family: var(--font-mono); color: var(--ink-soft); }
+
+  .progress-track{ height: 4px; background: var(--panel-alt); border-radius: 999px; overflow:hidden; }
+  .progress-fill{ height:100%; background: var(--accent); border-radius: 999px; width: 8%; transition: width 700ms ease; }
+
+  .agent-log{
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    background: var(--panel-alt);
+    border-radius: var(--radius-s);
+    padding: 8px 10px;
+    height: 56px;
+    overflow: hidden;
+  }
+  .agent-log div{ white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
+  .agent-log div:last-child{ color: var(--ink); }
+
+  /* ---------- Endpoints + API columns ---------- */
+  .two-col{ display:grid; grid-template-columns: 1.2fr 0.8fr; gap: 22px; align-items:start; }
+  @media (max-width: 900px){ .two-col{ grid-template-columns: 1fr; } }
+
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    overflow:hidden;
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .panel-head .sub{ font-weight:400; color: var(--ink-soft); font-family: var(--font-mono); font-size: 12px; }
+
+  table{ width:100%; border-collapse: collapse; font-size: 13.5px; }
+  thead th{
+    text-align:left; font-weight:500; color: var(--ink-soft);
+    font-size: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line);
+  }
+  tbody td{ padding: 11px 16px; border-bottom: 1px solid var(--line); }
+  tbody tr:last-child td{ border-bottom:none; }
+  td.mono, th.mono{ font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-soft); }
+
+  .badge{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding: 4px 9px; border-radius: 999px; }
+  .badge .dot{ width:6px; height:6px; border-radius:50%; background: currentColor; }
+  .badge.online{ background: var(--ok-soft); color: var(--ok); }
+  .badge.scanning{ background: var(--accent-soft); color: var(--accent); }
+  .badge.scanning .dot{ animation: pulse-op 1.2s ease-in-out infinite; }
+  .badge.risk{ background: var(--risk-soft); color: var(--risk); }
+
+  /* API log */
+  .api-log{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.9;
+    padding: 12px 16px;
+    height: 300px;
+    overflow-y: auto;
+    color: var(--ink-soft);
+  }
+  .api-log .m{ color: var(--accent); font-weight:600; }
+  .api-log .s2{ color: var(--ok); }
+  .api-log .s4{ color: var(--risk); }
+  .api-log div{ white-space: nowrap; }
+
+  /* ---------- Findings ---------- */
+  .findings-list{ display:flex; flex-direction:column; gap: 10px; }
+  .finding{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line-strong);
+    border-radius: var(--radius-s);
+    padding: 13px 16px;
+    display:grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 16px;
+    align-items:center;
+    animation: slide-in 360ms ease;
+  }
+  .finding.sev-critical{ border-left-color: var(--risk); }
+  .finding.sev-high{ border-left-color: var(--warn); }
+  .finding.sev-medium{ border-left-color: var(--accent); }
+  .finding.sev-low{ border-left-color: var(--ok); }
+  .sev-chip{ font-size:11.5px; font-weight:700; padding: 4px 8px; border-radius: 4px; text-transform: none; letter-spacing: 0.01em; }
+  .sev-chip.sev-critical{ background: var(--risk-soft); color: var(--risk); }
+  .sev-chip.sev-high{ background: var(--warn-soft); color: var(--warn); }
+  .sev-chip.sev-medium{ background: var(--accent-soft); color: var(--accent); }
+  .sev-chip.sev-low{ background: var(--ok-soft); color: var(--ok); }
+  .finding-main .title{ font-size: 14px; font-weight:600; }
+  .finding-main .meta{ font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; font-family: var(--font-mono); }
+  .finding-time{ font-size: 12px; color: var(--ink-soft); font-family: var(--font-mono); white-space: nowrap; }
+  @media (max-width: 620px){
+    .finding{ grid-template-columns: 1fr; gap: 6px; }
+  }
+
+  .findings-foot{ display:flex; justify-content:flex-end; margin-top: 18px; }
+
+  /* ---------- Footer ---------- */
+  footer{ padding: 40px 0 56px; }
+  footer .wrap{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap: 14px; }
+  footer p{ font-size: 13px; color: var(--ink-soft); }
+  footer a{ font-size: 13px; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+
+
+  /* ---------- Terminal Console ---------- */
+  .terminal-wrap {
+    background: #111418;
+    color: #e4e7eb;
+    border-radius: var(--radius-m);
+    padding: 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--ink);
+    margin-top: 24px;
+    line-height: 1.6;
+  }
+  .terminal-wrap .t-time { color: #5b6470; margin-right: 8px; }
+  .terminal-wrap .t-agent { color: var(--accent); font-weight: 600; margin-right: 8px; }
+  .terminal-wrap .t-event { color: #9aa2ac; margin-right: 8px; }
+  .terminal-wrap .t-detail { color: #e4e7eb; }
+  .terminal-wrap .t-error { color: var(--risk); }
+
+  /* ---------- Phase Timeline ---------- */
+  .phase-timeline {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-m);
+    padding: 20px 24px;
+    position: relative;
+  }
+  .phase-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    z-index: 2;
+    position: relative;
+    flex: 1;
+    text-align: center;
+  }
+  .phase-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--panel-alt);
+    border: 2px solid var(--line-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-soft);
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+  }
+  .phase-step.active .phase-icon {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+    box-shadow: 0 0 0 4px rgba(58, 110, 165, 0.15);
+  }
+  .phase-step.completed .phase-icon {
+    border-color: var(--ok);
+    background: var(--ok);
+    color: #fff;
+  }
+  .phase-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+  .phase-step.active .phase-label { color: var(--ink); }
+  .phase-step.completed .phase-label { color: var(--ink); }
+  
+  .phase-track {
+    position: absolute;
+    top: 35px;
+    left: 40px;
+    right: 40px;
+    height: 2px;
+    background: var(--line);
+    z-index: 1;
+  }
+  .phase-progress {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.5s ease;
+  }
+  /* ---------- Animations ---------- */
+  @keyframes pulse-op{ 0%,100%{ opacity: 1; } 50%{ opacity: .25; } }
+  @keyframes slide-in{ from{ opacity:0; transform: translateY(-6px); } to{ opacity:1; transform:none; } }
+
+  @media (prefers-reduced-motion: reduce){
+    .pulse-dot, .live-pill .pulse-dot, .badge.scanning .dot{ animation: none !important; }
+    .finding{ animation: none !important; }
+    .progress-fill{ transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="wrap">
+      <div class="brand">
+        <span>Multi&#8209;Agent Vulnerability &amp; Endpoint Security System</span>
+      </div>
+      <nav>
+        <a href="#workflow">Agent workflow</a>
+        <a href="#endpoints">Endpoints</a>
+        <a href="#findings">Findings</a>
+      </nav>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="wrap">
+      <div>
+        <div class="hero-eyebrow">Autonomous endpoint defense</div>
+        <h1>Six agents. One endpoint fleet. Watched in real time.</h1>
+        <p class="lede">
+          This demo runs a coordinating orchestrator and six specialist agents against a simulated
+          endpoint fleet &mdash; discovering assets, scanning for vulnerabilities, scoring risk, and
+          drafting fixes concurrently, with every API call logged as it happens.
+        </p>
+        <div class="hero-actions">
+          <button class="btn btn-primary" id="toggleBtn" type="button">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="toggleBtnLabel">Run Live Assessment</span>
+          </button>
+          <a class="btn btn-secondary" href="#findings">Jump to findings</a>
+          <a class="btn btn-quiet" href="https://github.com/nanditapatramumu/Cybersecurity-Agent" target="_blank" rel="noopener">View source on GitHub</a>
+        </div>
+      </div>
+
+      <div class="hero-widget">
+        <div class="hero-widget-top">
+          <span>Fleet status</span>
+          <span class="live-pill" id="livePill"><span class="pulse-dot" aria-hidden="true"></span><span id="livePillLabel">Live</span></span>
+        </div>
+        <div class="stat-grid">
+          <div class="stat"><div class="n" id="statEndpoints">0</div><div class="l">Endpoints monitored</div></div>
+          <div class="stat"><div class="n" id="statAgents">6</div><div class="l">Agents active</div></div>
+          <div class="stat"><div class="n" id="statFindings">0</div><div class="l">Open findings</div></div>
+          <div class="stat"><div class="n" id="statChecks">0</div><div class="l">Checks run</div></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="target-bar">
+    <div class="wrap">
+      <div class="target-row">
+        <div class="mode-switch" role="tablist" aria-label="Choose what the agents run against">
+          <button class="mode-btn active" id="modeDemoBtn" type="button" role="tab" aria-selected="true">Use demo fleet</button>
+          <button class="mode-btn" id="modeCustomBtn" type="button" role="tab" aria-selected="false">Enter a website</button>
+        </div>
+        <form class="target-form" id="targetForm" hidden>
+          <div class="url-field">
+            <input type="text" id="targetInput" inputmode="url" autocomplete="off" spellcheck="false"
+                   placeholder="http://127.0.0.1:8000" aria-label="Website base URL">
+          </div>
+          <button class="btn btn-primary" type="submit" id="runTargetBtn">
+            <span class="dot" aria-hidden="true"></span> Run
+          </button>
+        </form>
+      </div>
+      <p class="target-help" id="targetHelp">Type a base URL and press Run (or Enter) to relabel the workflow around it.</p>
+      <div class="target-active">
+        <span>Currently running against:</span>
+        <strong id="targetActiveLabel">http://127.0.0.1:8000</strong>
+        <span class="sim-note" id="simNote" style="background:var(--risk-soft);color:var(--risk);">Live Assessment Mode</span>
+      </div>
+    </div>
+  </div>
+
+  <section id="workflow">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <h2>Agent workflow</h2>
+          <p>Every agent runs on its own clock, reporting back to the orchestrator as work finishes &mdash; not a queue, a mesh.</p>
+        </div>
+      </div>
+
+      <div class="flow-svg-wrap">
+        <svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram of an orchestrator at the center routing work out to six specialist agents arranged around it, with animated pulses showing live, two-way data flow to each agent and back.">
+          <g stroke="#c1c6cd" stroke-width="1.5" fill="none">
+            <path id="p0" d="M380,230 L380,60"></path>
+            <path id="p1" d="M380,230 L527,145"></path>
+            <path id="p2" d="M380,230 L527,315"></path>
+            <path id="p3" d="M380,230 L380,400"></path>
+            <path id="p4" d="M380,230 L233,315"></path>
+            <path id="p5" d="M380,230 L233,145"></path>
+          </g>
+
+          <g id="pulses" fill="#3a6ea5"></g>
+
+          <circle cx="380" cy="230" r="34" fill="#20242a"></circle>
+          <text x="380" y="226" text-anchor="middle" fill="#ffffff" font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="600">HUB</text>
+          <text x="380" y="240" text-anchor="middle" fill="#c1c6cd" font-family="IBM Plex Sans, sans-serif" font-size="9">routes work</text>
+
+          <g id="agent-nodes" font-family="IBM Plex Sans, sans-serif" font-size="13" fill="#20242a" text-anchor="middle" font-weight="500">
+            <g transform="translate(380,60)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="-32">Recon</text></g>
+            <g transform="translate(527,145)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="-32">Scanner</text></g>
+            <g transform="translate(527,315)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="44">Threat intel</text></g>
+            <g transform="translate(380,400)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="44">Risk scoring</text></g>
+            <g transform="translate(233,315)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="44">Remediation</text></g>
+            <g transform="translate(233,145)"><circle r="22" fill="#ffffff" stroke="#3a6ea5" stroke-width="2"></circle><text y="-32">Reporting</text></g>
+          </g>
+        </svg>
+        <p class="flow-caption">The orchestrator (center) hands work out to whichever agent should run next; each agent reports its result straight back before the next hop &mdash; the moving dots trace that round trip on all six spokes at once, which is what makes the agents feel concurrent rather than a queue.</p>
+      </div>
+
+      <div class="agent-grid" id="agentGrid"></div>
+
+      <div class="langgraph-panel">
+        <div class="panel-head">
+          <span>How this maps to LangGraph</span>
+          <span class="sub">supervisor pattern</span>
+        </div>
+        <p class="langgraph-intro">The hub-and-spoke shape above is the common LangGraph <em>supervisor</em> pattern: one node decides which specialist runs next, and every specialist routes back to that same node instead of to each other.</p>
+        <pre class="code-block"><code>from langgraph.graph import StateGraph, END
+
+graph = StateGraph(AgentState)
+
+graph.add_node("orchestrator", orchestrator_node)
+graph.add_node("recon", recon_node)
+graph.add_node("scanner", scanner_node)
+graph.add_node("threat_intel", threat_intel_node)
+graph.add_node("risk_scoring", risk_scoring_node)
+graph.add_node("remediation", remediation_node)
+graph.add_node("reporting", reporting_node)
+
+graph.set_entry_point("orchestrator")
+
+# the orchestrator decides which specialist should act next
+graph.add_conditional_edges(
+    "orchestrator",
+    route_to_next_agent,
+    {
+        "recon": "recon",
+        "scanner": "scanner",
+        "threat_intel": "threat_intel",
+        "risk_scoring": "risk_scoring",
+        "remediation": "remediation",
+        "reporting": "reporting",
+        "done": END,
+    },
+)
+
+# every specialist reports back to the orchestrator, never to each other
+for agent in ["recon", "scanner", "threat_intel", "risk_scoring", "remediation", "reporting"]:
+    graph.add_edge(agent, "orchestrator")
+
+app = graph.compile()</code></pre>
+      </div>
+
+      <div id="liveConsole" style="display: none; margin-top: 40px; padding-top: 40px; border-top: 1px solid var(--line);">
+        <div class="section-head">
+          <div>
+            <h2>Live Execution Console</h2>
+            <p>Real-time telemetry and analysis from the PANDA agents.</p>
+          </div>
+        </div>
+
+        <div class="phase-timeline">
+          <div class="phase-track"><div class="phase-progress" id="phaseProgress"></div></div>
+          <div class="phase-step" id="phase-recon"><div class="phase-icon">1</div><div class="phase-label">Recon</div></div>
+          <div class="phase-step" id="phase-understanding"><div class="phase-icon">2</div><div class="phase-label">Understanding</div></div>
+          <div class="phase-step" id="phase-threat_modeling"><div class="phase-icon">3</div><div class="phase-label">Threat Modeling</div></div>
+          <div class="phase-step" id="phase-test_planning"><div class="phase-icon">4</div><div class="phase-label">Planning</div></div>
+          <div class="phase-step" id="phase-execution"><div class="phase-icon">5</div><div class="phase-label">Execution</div></div>
+          <div class="phase-step" id="phase-reporting"><div class="phase-icon">6</div><div class="phase-label">Reporting</div></div>
+        </div>
+
+        <div class="terminal-wrap" id="terminalLog">
+          <div class="t-detail">PANDA agent standing by. Ready to execute assessment.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="endpoints">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <h2>Live endpoints &amp; API activity</h2>
+          <p>The fleet the agents above are currently working against, and the raw calls driving it.</p>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-head">
+            <span>Monitored endpoints</span>
+            <span class="sub" id="endpointsSub">GET /api/v1/endpoints</span>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Endpoint</th><th>IP address</th><th class="mono">OS</th><th>Status</th><th class="mono">Last scan</th></tr>
+            </thead>
+            <tbody id="endpointsBody"></tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <span>API activity</span>
+            <span class="sub" id="apiSub">live</span>
+          </div>
+          <div class="api-log" id="apiLog"></div>
+        </div>
+      </div>
+
+      <div id="liveConsole" style="display: none; margin-top: 40px; padding-top: 40px; border-top: 1px solid var(--line);">
+        <div class="section-head">
+          <div>
+            <h2>Live Execution Console</h2>
+            <p>Real-time telemetry and analysis from the PANDA agents.</p>
+          </div>
+        </div>
+
+        <div class="phase-timeline">
+          <div class="phase-track"><div class="phase-progress" id="phaseProgress"></div></div>
+          <div class="phase-step" id="phase-recon"><div class="phase-icon">1</div><div class="phase-label">Recon</div></div>
+          <div class="phase-step" id="phase-understanding"><div class="phase-icon">2</div><div class="phase-label">Understanding</div></div>
+          <div class="phase-step" id="phase-threat_modeling"><div class="phase-icon">3</div><div class="phase-label">Threat Modeling</div></div>
+          <div class="phase-step" id="phase-test_planning"><div class="phase-icon">4</div><div class="phase-label">Planning</div></div>
+          <div class="phase-step" id="phase-execution"><div class="phase-icon">5</div><div class="phase-label">Execution</div></div>
+          <div class="phase-step" id="phase-reporting"><div class="phase-icon">6</div><div class="phase-label">Reporting</div></div>
+        </div>
+
+        <div class="terminal-wrap" id="terminalLog">
+          <div class="t-detail">PANDA agent standing by. Ready to execute assessment.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="findings">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <h2>Findings feed</h2>
+          <p>Newest first. Each entry names the agent that surfaced it and the endpoint it affects.</p>
+        </div>
+        <button class="btn btn-secondary" id="exportBtn" type="button">Export report</button>
+      </div>
+
+      <div class="findings-list" id="findingsList"></div>
+      <div class="findings-foot">
+        <span style="font-size:12.5px;color:var(--ink-soft);" id="findingsEmpty">Findings will appear here as agents complete their first pass.</span>
+      </div>
+
+      <div id="liveConsole" style="display: none; margin-top: 40px; padding-top: 40px; border-top: 1px solid var(--line);">
+        <div class="section-head">
+          <div>
+            <h2>Live Execution Console</h2>
+            <p>Real-time telemetry and analysis from the PANDA agents.</p>
+          </div>
+        </div>
+
+        <div class="phase-timeline">
+          <div class="phase-track"><div class="phase-progress" id="phaseProgress"></div></div>
+          <div class="phase-step" id="phase-recon"><div class="phase-icon">1</div><div class="phase-label">Recon</div></div>
+          <div class="phase-step" id="phase-understanding"><div class="phase-icon">2</div><div class="phase-label">Understanding</div></div>
+          <div class="phase-step" id="phase-threat_modeling"><div class="phase-icon">3</div><div class="phase-label">Threat Modeling</div></div>
+          <div class="phase-step" id="phase-test_planning"><div class="phase-icon">4</div><div class="phase-label">Planning</div></div>
+          <div class="phase-step" id="phase-execution"><div class="phase-icon">5</div><div class="phase-label">Execution</div></div>
+          <div class="phase-step" id="phase-reporting"><div class="phase-icon">6</div><div class="phase-label">Reporting</div></div>
+        </div>
+
+        <div class="terminal-wrap" id="terminalLog">
+          <div class="t-detail">PANDA agent standing by. Ready to execute assessment.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <p>Frontend demo for the Multi&#8209;Agent Vulnerability &amp; Endpoint Security System. All activity on this page is simulated locally.</p>
+      <a href="https://github.com/nanditapatramumu/Cybersecurity-Agent" target="_blank" rel="noopener">Project repository</a>
+    </div>
+  </footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var targetUrl = "http://127.0.0.1:8000";
+  var allowWrite = false;
+  var ws = null;
+  var isRunning = false;
+  
+  var toggleBtn = document.getElementById('toggleBtn');
+  var toggleBtnLabel = document.getElementById('toggleBtnLabel');
+  var livePill = document.getElementById('livePill');
+  var livePillLabel = document.getElementById('livePillLabel');
+  var terminalLog = document.getElementById('terminalLog');
+  var liveConsole = document.getElementById('liveConsole');
+  var phaseProgress = document.getElementById('phaseProgress');
+  
+  var findingsList = document.getElementById('findingsList');
+  var findingsEmpty = document.getElementById('findingsEmpty');
+  var statFindings = document.getElementById('statFindings');
+  var statChecks = document.getElementById('statChecks');
+  var statEndpoints = document.getElementById('statEndpoints');
+  var apiLog = document.getElementById('apiLog');
+  
+  var checksCount = 0;
+
+  var targetInput = document.getElementById('targetInput');
+  var targetForm = document.getElementById('targetForm');
+  var targetActiveLabel = document.getElementById('targetActiveLabel');
+
+  targetForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    if(targetInput.value) {
+       targetUrl = targetInput.value;
+       if (!/^https?:\/\//i.test(targetUrl)) targetUrl = 'http://' + targetUrl;
+       targetActiveLabel.textContent = targetUrl;
+    }
+  });
+
+  function appendTerminal(agent, event, detail, isError) {
+    var line = document.createElement('div');
+    var d = new Date();
+    var time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+    
+    var html = '<span class="t-time">' + time + '</span>';
+    html += '<span class="t-agent">[' + agent + ']</span>';
+    if(event) html += '<span class="t-event">' + event + '</span>';
+    
+    var detailClass = isError ? 't-error' : 't-detail';
+    html += '<span class="' + detailClass + '">' + detail + '</span>';
+    
+    line.innerHTML = html;
+    terminalLog.appendChild(line);
+    terminalLog.scrollTop = terminalLog.scrollHeight;
+  }
+
+  function setPhase(phaseId, progress) {
+    var phases = ['recon', 'understanding', 'threat_modeling', 'test_planning', 'execution', 'reporting'];
+    var activeIdx = phases.indexOf(phaseId);
+    if(activeIdx === -1) return;
+    
+    phases.forEach(function(p, i) {
+       var el = document.getElementById('phase-' + p);
+       if(!el) return;
+       if(i < activeIdx) {
+           el.classList.add('completed');
+           el.classList.remove('active');
+       } else if(i === activeIdx) {
+           el.classList.add('active');
+           el.classList.remove('completed');
+       } else {
+           el.classList.remove('active');
+           el.classList.remove('completed');
+       }
+    });
+    
+    if(progress !== undefined && progress !== null) {
+       phaseProgress.style.width = progress + '%';
+    }
+  }
+
+  function renderFindings(findings) {
+      if(!findings || !findings.length) return;
+      findingsEmpty.style.display = 'none';
+      statFindings.textContent = findings.length;
+      
+      var SEV_LABEL = { 'CRITICAL': 'Critical', 'HIGH': 'High', 'MEDIUM': 'Medium', 'LOW': 'Low', 'INFO': 'Info' };
+      findingsList.innerHTML = '';
+      
+      findings.forEach(function(f) {
+        var el = document.createElement('div');
+        var sevClass = f.severity.toLowerCase();
+        el.className = 'finding sev-' + sevClass;
+        el.innerHTML =
+          '<span class="sev-chip sev-' + sevClass + '">' + (SEV_LABEL[f.severity] || f.severity) + '</span>' +
+          '<div class="finding-main"><div class="title">' + f.title + '</div>' +
+            '<div class="meta">' + f.owasp_category + ' &middot; ' + f.id + '</div></div>';
+        findingsList.appendChild(el);
+      });
+  }
+
+  function logApiCall(method, path, status, ms) {
+    checksCount++;
+    statChecks.textContent = checksCount;
+    var statusClass = status >= 400 ? 's4' : (status >= 200 && status < 300 ? 's2' : '');
+    var line = document.createElement('div');
+    var d = new Date();
+    var time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+    line.innerHTML = time + '&nbsp;&nbsp;<span class="m">' + String(method).padEnd(5) + '</span>' + path + '&nbsp;&nbsp;<span class="' + statusClass + '">' + status + '</span>&nbsp;&nbsp;' + Math.round(ms) + 'ms';
+    apiLog.appendChild(line);
+    while(apiLog.children.length > 50){ apiLog.removeChild(apiLog.firstChild); }
+    apiLog.scrollTop = apiLog.scrollHeight;
+  }
+
+  function connectAndRun() {
+    if(isRunning) return;
+    
+    liveConsole.style.display = 'block';
+    appendTerminal('system', 'init', 'Connecting to PANDA backend WebSocket...');
+    
+    ws = new WebSocket('ws://' + window.location.host + '/ws/run');
+    
+    ws.onopen = function() {
+      isRunning = true;
+      toggleBtnLabel.textContent = 'Assessment Running...';
+      toggleBtn.disabled = true;
+      livePill.classList.remove('paused');
+      livePillLabel.textContent = 'Live';
+      
+      // Send config
+      ws.send(JSON.stringify({ target_url: targetUrl, allow_write: allowWrite }));
+      appendTerminal('system', 'connected', 'Triggered PANDA pipeline against ' + targetUrl);
+    };
+    
+    ws.onmessage = function(e) {
+      try {
+        var msg = JSON.parse(e.data);
+        
+        // Progress / Phase updates
+        if(msg.type === 'phase_start' || msg.type === 'phase_complete') {
+            if(msg.phase) setPhase(msg.phase, msg.progress);
+        } else if (msg.progress !== undefined) {
+            phaseProgress.style.width = msg.progress + '%';
+        }
+        
+        // Render findings
+        if(msg.findings && msg.findings.length > 0) {
+            renderFindings(msg.findings);
+        }
+        
+        // Render API Calls
+        if(msg.agent === 'executor' && msg.action === 'called tool') {
+             // Try to parse out method, path, status from detail string like "GET /api/v1/users (anonymous) -> 200"
+             var m = msg.detail.match(/^([A-Z]+)\s+(.*?)\s+\(.*?\)\s*->\s*(\d+)/);
+             if(m) {
+                 logApiCall(m[1], m[2], m[3], 50 + Math.random()*100);
+             }
+        }
+        
+        var isErr = msg.type === 'error';
+        appendTerminal(msg.agent, msg.action, msg.detail || '', isErr);
+        
+      } catch(err) {
+        console.error("Error parsing WS message", err);
+      }
+    };
+    
+    ws.onclose = function() {
+      isRunning = false;
+      toggleBtnLabel.textContent = 'Run Live Assessment';
+      toggleBtn.disabled = false;
+      livePill.classList.add('paused');
+      livePillLabel.textContent = 'Paused';
+      appendTerminal('system', 'disconnected', 'Pipeline connection closed.');
+    };
+    
+    ws.onerror = function(err) {
+      appendTerminal('system', 'error', 'WebSocket error', true);
+    };
+  }
+
+  toggleBtn.addEventListener('click', function(){
+      if(!isRunning) {
+          checksCount = 0;
+          statChecks.textContent = '0';
+          apiLog.innerHTML = '';
+          terminalLog.innerHTML = '';
+          connectAndRun();
+      }
+  });
+
+})();
+</script>
+</body>
+</html>

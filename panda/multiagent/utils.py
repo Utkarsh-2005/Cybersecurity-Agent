@@ -5,13 +5,40 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 import httpx
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+
+
+# ---------------------------------------------------------------------------
+# Global event callback registry (thread-safe)
+# ---------------------------------------------------------------------------
+# WebSocket handlers register a callback here so _emit_event can broadcast
+# events to the browser in addition to printing to the terminal.
+
+_event_callbacks: list[Callable[[dict[str, Any]], None]] = []
+_callback_lock = threading.Lock()
+
+
+def register_event_callback(cb: Callable[[dict[str, Any]], None]) -> None:
+    """Register a callback that receives every _emit_event payload."""
+    with _callback_lock:
+        _event_callbacks.append(cb)
+
+
+def unregister_event_callback(cb: Callable[[dict[str, Any]], None]) -> None:
+    """Remove a previously registered callback."""
+    with _callback_lock:
+        try:
+            _event_callbacks.remove(cb)
+        except ValueError:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -87,14 +114,43 @@ def _emit_event(
     tool: str | None = None,
     detail: str = "",
     usage: dict[str, Any] | None = None,
+    *,
+    phase: str | None = None,
+    event_type: str = "agent_event",
+    progress: int | None = None,
+    findings: list[dict[str, Any]] | None = None,
 ) -> None:
-    event = {"agent": agent, "action": action, "tool": tool, "detail": detail}
+    event: dict[str, Any] = {
+        "type": event_type,
+        "agent": agent,
+        "action": action,
+        "tool": tool,
+        "detail": detail,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
     if usage is not None:
         event["usage"] = usage
+    if phase is not None:
+        event["phase"] = phase
+    if progress is not None:
+        event["progress"] = progress
+    if findings is not None:
+        event["findings"] = findings
     events.append(event)
+
+    # Console output (unchanged)
     tool_text = f" tool={tool}" if tool else ""
     usage_text = f" usage={json.dumps(usage)}" if usage else ""
     print(f"[agent={agent}] {action}{tool_text}: {detail}{usage_text}")
+
+    # Broadcast to registered callbacks (WebSocket handlers)
+    with _callback_lock:
+        cbs = list(_event_callbacks)
+    for cb in cbs:
+        try:
+            cb(event)
+        except Exception:
+            pass  # never let a broken callback crash the pipeline
 
 
 def _auth_profiles() -> dict[str, dict[str, str]]:

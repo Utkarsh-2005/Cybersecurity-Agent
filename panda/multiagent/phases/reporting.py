@@ -35,13 +35,17 @@ def _generate_report(
 ) -> SecurityReport:
     """Ask the LLM to synthesize all evidence into a structured security report."""
 
-    # Compile evidence summary
-    results_summary = json.dumps(
-        [r.model_dump(exclude={"response_headers"}) for r in all_results],
-        indent=2, default=str,
-    )
+    # Compile evidence summary (truncate body to save tokens and avoid budget limits)
+    compact_results = []
+    for r in all_results:
+        d = r.model_dump(exclude={"response_headers"})
+        if d.get("response_body_summary") and len(d["response_body_summary"]) > 250:
+            d["response_body_summary"] = d["response_body_summary"][:250] + "... (truncated)"
+        compact_results.append(d)
+        
+    results_summary = json.dumps(compact_results, indent=2, default=str)
     analyses_summary = json.dumps(
-        [a.model_dump() for a in all_analyses],
+        [a.model_dump(exclude={"reasoning", "continuation_rationale"}) for a in all_analyses],
         indent=2, default=str,
     )
     hypotheses_json = json.dumps([h.model_dump() for h in hypotheses], indent=2)

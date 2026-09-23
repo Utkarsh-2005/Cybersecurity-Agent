@@ -1,11 +1,12 @@
 """FastAPI app initialisation, middleware, and exception handler."""
 
-import traceback
-
+import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
+from panda.multiagent.ws_server import ws_router
 
 # ---------------------------------------------------------------------------
 # FastAPI app
@@ -17,6 +18,13 @@ app = FastAPI(
     description="Internal API for managing AcmeCorp employee accounts and reports.",
 )
 
+app.include_router(ws_router)
+
+# Serve the main frontend page
+@app.get("/")
+async def serve_frontend():
+    return FileResponse(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "index.html"))
+
 # Security misconfiguration: wildcard CORS
 app.add_middleware(
     CORSMiddleware,
@@ -25,6 +33,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 # ---------------------------------------------------------------------------
